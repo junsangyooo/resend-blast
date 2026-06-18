@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens (RGB channels for /opacity 지원) ──
+ * 화이트라벨: 앱 UI 브랜드 색은 아래 --brand / --brand-deep / --brand-mint / --rail
+ * (light·dark 각각) 4개를 바꾸면 된다. 이메일 본문 색은 별도(brand.config.ts 의
+ * email.colors). UI 와 이메일 톤을 맞추려면 두 곳을 같은 값으로 둔다. (docs/WHITELABEL.md)
+ */
+:root {
+  /* Light — ops console: 밝은 회색 캔버스 · 솔리드 틸 레일 · 민트 악센트 */
+  --bg: 240 242 245;
+  --surface: 255 255 255;
+  --surface2: 247 248 250;
+  --border: 226 229 234;
+  --muted: 108 115 124;
+  --text: 24 28 33;
+  --brand: 17 158 135;        /* teal accent — 흰 배경에서 가독 */
+  --brand-deep: 13 124 108;
+  --brand-mint: 92 212 195;   /* CTA 그라데이션 밝은 쪽 */
+  --rail: 23 165 142;         /* 좌측 세로 레일 솔리드 틸 */
+  --on-brand: 255 255 255;
+  --ring: 17 158 135;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px rgb(16 24 40 / 0.06);
+}
+:root[data-theme="dark"] {
+  --bg: 14 15 17;
+  --surface: 22 23 26;
+  --surface2: 28 30 34;
+  --border: 38 40 46;
+  --muted: 140 146 156;
+  --text: 240 242 245;
+  --brand: 80 214 196;        /* mint — 어두운 배경에서 가독 */
+  --brand-deep: 23 165 142;
+  --brand-mint: 110 224 208;
+  --rail: 20 134 116;         /* 레일은 다크에서 살짝 딥하게 */
+  --on-brand: 8 12 14;
+  --ring: 80 214 196;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+@layer base {
+  html, body {
+    background: rgb(var(--bg));
+    color: rgb(var(--text));
+    -webkit-font-smoothing: antialiased;
+  }
+  html { color-scheme: light dark; }
+  body { min-height: 100dvh; }
+  input, textarea, select { font-size: 14px; }
+  ::selection { background: rgb(var(--brand) / 0.3); }
+  * { transition: background-color .15s, border-color .15s, color .15s; }
+}
+
+@layer components {
+  .input {
+    @apply w-full rounded-lg bg-surface2 border border-border px-3 py-2 text-text placeholder:text-muted/60 outline-none transition
+           focus:border-brand focus:ring-2 focus:ring-brand/25;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition;
+  }
+  .btn-primary {
+    @apply btn text-onBrand shadow-sm active:scale-[0.99] disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100;
+    background-image: linear-gradient(135deg, rgb(var(--brand-mint)), rgb(var(--brand)));
+  }
+  .btn-ghost {
+    @apply btn border border-border bg-surface text-text/80 hover:border-brand/50 hover:text-text;
+  }
+  .card {
+    @apply rounded-xl border border-border bg-surface;
+    box-shadow: var(--shadow);
+  }
+  .kicker {
+    @apply text-[10px] tracking-[0.22em] uppercase text-brand font-bold;
+  }
+  .icon-btn {
+    @apply w-7 h-7 inline-flex items-center justify-center rounded-md text-xs text-muted
+           hover:bg-surface2 hover:text-text transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent;
+  }
+  /* ① ② ③ 단계 배지 — 솔리드 틸 */
+  .step-badge {
+    @apply w-6 h-6 rounded-full bg-brand text-onBrand text-xs font-bold
+           inline-flex items-center justify-center shrink-0;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md bg-surface2 border border-border px-2 py-0.5 text-[11px] text-text/80;
+  }
+  /* 헤더 탭 버튼 */
+  .tab-btn {
+    @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted
+           hover:text-text hover:bg-surface2 transition;
+  }
+  /* ── 좌측 세로 레일 ── */
+  .rail-btn {
+    @apply w-14 flex flex-col items-center gap-1 py-2.5 rounded-xl text-white/65
+           hover:text-white hover:bg-white/10 transition text-[10px] font-medium;
+  }
+  .rail-btn-active {
+    @apply text-white bg-white/15;
+  }
+  .rail-icon-btn {
+    @apply w-10 h-10 inline-flex items-center justify-center rounded-xl text-white/65
+           hover:text-white hover:bg-white/10 transition;
+  }
+  /* 수신자 숫자 카드 */
+  .stat-box {
+    @apply rounded-xl border border-border bg-surface px-4 py-3;
+  }
+  /* 프리뷰 하단 다크 기술 스트립 */
+  .canvas-strip {
+    @apply font-mono text-[10px] tracking-[0.15em] text-white/65 rounded-lg px-3.5 py-2 flex items-center;
+    background: #16181d;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+}

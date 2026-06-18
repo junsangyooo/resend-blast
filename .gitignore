@@ -1,0 +1,23 @@
+node_modules/
+.next/
+.env.local
+.env*.local
+*.log
+.DS_Store
+
+# data/ 는 운영 상태(리스트·발송로그·로고)를 GitHub로 백업하기 위해 화이트리스트 방식.
+# deploy 스크립트가 prod→local 로 rsync 한 뒤 git push 하면 다음 항목만 추적된다.
+data/*
+!data/lists/
+!data/sends/
+!data/logos.json
+!data/from.json
+!data/admins.json
+!data/suppression.json
+# atomic write 임시 파일 / 옛 트래킹 구조 잔재는 항상 ignore
+data/**/*.tmp
+data/**/.*.tmp
+data/sent-ids.json.legacy
+
+# TS incremental build cache
+tsconfig.tsbuildinfo

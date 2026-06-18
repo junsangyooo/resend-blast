@@ -1,0 +1,214 @@
+#!/bin/bash
+# RLWRLD Email Blast · 미니PC 배포 스크립트 (git 기반, atomic rollback, flock)
+# 사용: ./deploy-email-blast           — 코드+env push → 빌드+재시작 (실패 시 자동 롤백)
+#       ./deploy-email-blast backup    — 프로덕션 템플릿/리스트/발송로그 백업 → GitHub
+#       ./deploy-email-blast logs      — 서비스 로그
+#       ./deploy-email-blast status    — 서비스 상태
+#       ./deploy-email-blast init      — 첫 배포 안내 (systemd/Caddy)
+
+set -euo pipefail
+
+HOST="rlwrld@192.168.0.88"
+REMOTE_DIR="~/projects/rlwrld-email-blast"
+SERVICE="email-blast"
+URL="https://email-blast.rlwrld.co"
+LOCK_DIR="/tmp/email-blast-deploy.lock.d"
+
+cd "$(dirname "$0")"
+
+# 동시 배포 방지 — mkdir 은 POSIX atomic. macOS/Linux 모두 동작 (flock 의존 X).
+acquire_lock() {
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # 락이 stale 한지 확인: PID 파일을 보고 해당 프로세스가 살아있나 체크
+    if [ -f "$LOCK_DIR/pid" ]; then
+      OLD_PID=$(cat "$LOCK_DIR/pid" 2>/dev/null || echo "")
+      if [ -n "$OLD_PID" ] && ! kill -0 "$OLD_PID" 2>/dev/null; then
+        echo "  · stale lock 정리 (이전 PID $OLD_PID 종료됨)"
+        rm -rf "$LOCK_DIR"
+        mkdir "$LOCK_DIR" 2>/dev/null || { echo "⚠ 락 획득 실패"; exit 1; }
+      else
+        echo "⚠ 다른 배포가 진행 중입니다. (PID $OLD_PID)"
+        echo "  강제 해제: rm -rf $LOCK_DIR"
+        exit 1
+      fi
+    else
+      echo "⚠ 다른 배포가 진행 중입니다. ($LOCK_DIR)"
+      exit 1
+    fi
+  fi
+  echo $$ > "$LOCK_DIR/pid"
+  trap 'rm -rf "$LOCK_DIR"' EXIT
+}
+
+backup_prod() {
+  echo "  · 프로덕션 templates/ + data/ 백업..."
+  mkdir -p data
+  # templates: 프로덕션이 source of truth (UI에서 생성·삭제됨) — 미러링(--delete)이라
+  # UI에서 지운 템플릿이 git에 남아 다음 배포 때 부활하지 않는다.
+  rsync -aq --delete --exclude='*.tmp' --exclude='.*.tmp' \
+    "$HOST:$REMOTE_DIR/templates/" templates/ 2>/dev/null || true
+  # data: lists/sends/logos 등 운영 상태. sent-ids.json은 legacy (있으면 보존)
+  rsync -aq --delete --exclude='*.tmp' --exclude='.*.tmp' \
+    "$HOST:$REMOTE_DIR/data/" data/ 2>/dev/null || true
+}
+
+case "${1:-deploy}" in
+  init)
+    echo "→ 원격 디렉토리 생성..."
+    ssh "$HOST" "mkdir -p $REMOTE_DIR"
+    cat <<'EOF'
+
+다음을 미니PC에서 수동 1회 실행하세요:
+
+  # 1) systemd unit
+  sudo tee /etc/systemd/system/email-blast.service > /dev/null <<'UNIT'
+  [Unit]
+  Description=RLWRLD Email Blast (Next.js)
+  After=network.target
+
+  [Service]
+  Type=simple
+  User=rlwrld
+  WorkingDirectory=/home/rlwrld/projects/rlwrld-email-blast
+  Environment=NODE_ENV=production
+  Environment=PORT=3001
+  EnvironmentFile=/home/rlwrld/projects/rlwrld-email-blast/.env.local
+  ExecStart=/usr/bin/npm start
+  Restart=on-failure
+  RestartSec=5
+
+  [Install]
+  WantedBy=multi-user.target
+  UNIT
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable email-blast
+
+  # 2) Caddy 사이트 (SSL 자동 발급, DNS A 레코드 선행)
+  sudo tee -a /etc/caddy/Caddyfile > /dev/null <<'CADDY'
+
+  email-blast.rlwrld.co {
+      encode gzip
+      reverse_proxy 127.0.0.1:3001 {
+          flush_interval -1
+      }
+  }
+  CADDY
+  sudo caddy validate --config /etc/caddy/Caddyfile
+  sudo systemctl reload caddy
+
+  # 3) 무인 재시작 권한 (배포 시 sudo 프롬프트 제거)
+  echo "rlwrld ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart email-blast" | sudo tee /etc/sudoers.d/email-blast
+
+EOF
+    ;;
+
+  logs)
+    ssh -t "$HOST" "sudo journalctl -u $SERVICE -n 100 --no-pager -f"
+    ;;
+
+  status)
+    ssh -t "$HOST" "sudo systemctl status $SERVICE --no-pager"
+    ;;
+
+  backup)
+    acquire_lock
+    echo "→ 프로덕션 상태 백업 (서버 → 로컬 → GitHub)..."
+    backup_prod
+    git add templates/ data/ 2>/dev/null || true
+    if git diff --cached --quiet; then
+      echo "  (변경 없음)"
+    else
+      git commit -q -m "Backup prod state $(date +%F_%T)"
+      git push -q origin main
+      echo "✓ 백업 완료 (GitHub main)"
+    fi
+    ;;
+
+  deploy)
+    acquire_lock
+    # 1) 프로덕션 상태 백업 (templates 덮어쓰기 사고 방지 + data 안전망)
+    echo "→ [1/6] 프로덕션 상태 백업..."
+    backup_prod
+
+    # 2) 현재 서버 SHA 저장 (롤백용)
+    echo "→ [2/6] 롤백 포인트 기록..."
+    PREV_SHA=$(ssh "$HOST" "cd $REMOTE_DIR && git rev-parse HEAD" 2>/dev/null || echo "")
+    echo "  prev SHA: ${PREV_SHA:-(없음)}"
+
+    # 3) 로컬 commit + (다른 노트북 변경이 있으면 rebase) + push
+    echo "→ [3/6] 로컬 변경 commit + push..."
+    git add -A
+    if git diff --cached --quiet; then
+      echo "  (커밋할 변경 없음)"
+    else
+      git commit -q -m "Deploy $(date +%F_%T)"
+    fi
+    # 다른 노트북에서 push 한 변경을 먼저 받아온다. conflict 시 사용자 개입 필요.
+    if ! git pull --rebase -q origin main; then
+      echo "✗ git pull --rebase 충돌 — 수동 해결 후 다시 시도하세요."
+      git rebase --abort 2>/dev/null || true
+      exit 1
+    fi
+    git push -q origin main
+
+    # 4) .env.local 전송
+    echo "→ [4/6] .env.local 전송..."
+    if [ -f .env.local ]; then
+      scp -q .env.local "$HOST:$REMOTE_DIR/.env.local"
+    else
+      echo "  ⚠ .env.local 없음 — 서버의 기존 값을 그대로 사용합니다."
+      read -p "  계속할까요? (y/N): " ok
+      [ "$ok" = "y" ] || { echo "취소됨"; exit 1; }
+    fi
+
+    # 5) 서버: pull + install + build + restart. 빌드 실패 시 rollback
+    echo "→ [5/6] 서버 git pull + install + build + restart..."
+    set +e
+    # data/ 보호: reset --hard / clean 직전 서버의 라이브 data/ 를 스냅샷 → 작업 후 복원.
+    #   (프로덕션이 data/ 의 source of truth. backup_prod(step1) 이후 step5 사이에 완료된 신규
+    #    발송로그가 reset/clean 으로 사라지는 레이스를 막는다.)
+    # git clean -e data : data/ 는 청소 대상에서 제외(untracked 신규 발송파일 보존).
+    ssh "$HOST" "set -e; cd $REMOTE_DIR && rm -rf /tmp/eb-data-restore && cp -a data /tmp/eb-data-restore 2>/dev/null || true; git fetch -q origin && git reset --hard origin/main && git clean -fd -e data && (rsync -a /tmp/eb-data-restore/ data/ 2>/dev/null || true) && rm -rf /tmp/eb-data-restore && npm ci --no-audit --no-fund && npm run build && sudo systemctl restart $SERVICE"
+    DEPLOY_RC=$?
+    set -e
+    if [ $DEPLOY_RC -ne 0 ]; then
+      echo "✗ 빌드/재시작 실패 (rc=$DEPLOY_RC)"
+      if [ -n "$PREV_SHA" ]; then
+        echo "→ 롤백: $PREV_SHA"
+        ssh "$HOST" "cd $REMOTE_DIR && rm -rf /tmp/eb-data-restore && cp -a data /tmp/eb-data-restore 2>/dev/null || true; git reset --hard $PREV_SHA && git clean -fd -e data && (rsync -a /tmp/eb-data-restore/ data/ 2>/dev/null || true) && rm -rf /tmp/eb-data-restore && npm ci --no-audit --no-fund && npm run build && sudo systemctl restart $SERVICE" || echo "⚠ 롤백 실패 — 수동 개입 필요"
+      fi
+      exit 1
+    fi
+
+    # 6) 응답 + CSS 검증 (서비스가 새 빌드 물었는지)
+    echo "→ [6/6] 응답 검증..."
+    sleep 2
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/login")
+    if [ "$CODE" != "200" ] && [ "$CODE" != "307" ]; then
+      echo "⚠ HTTP $CODE — 로그 확인: './deploy-email-blast logs'"
+      exit 1
+    fi
+    CSS=$(curl -s "$URL/login" | grep -oE '/_next/static/css/[^"]+\.css' | head -1)
+    if [ -n "$CSS" ]; then
+      CSSCODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL$CSS")
+      if [ "$CSSCODE" != "200" ]; then
+        echo "⚠ 정적 자산 $CSS → HTTP $CSSCODE (서비스가 옛 빌드를 물고 있음)"
+        ssh -t "$HOST" "sudo systemctl restart $SERVICE"
+        exit 1
+      fi
+    fi
+    # 헬스체크 (인증 불필요 엔드포인트)
+    HCODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/health")
+    if [ "$HCODE" != "200" ]; then
+      echo "⚠ /api/health → HTTP $HCODE (서비스 비정상) — 로그 확인: './deploy-email-blast logs'"
+      exit 1
+    fi
+    echo "✓ 배포 완료 · $URL · HTTP $CODE · CSS 200 · health 200"
+    ;;
+
+  *)
+    echo "사용법: ./deploy-email-blast [deploy|backup|logs|status|init]"
+    exit 1
+    ;;
+esac
