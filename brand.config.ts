@@ -81,18 +81,20 @@ export const brand = {
 
   // ── 이메일 본문 렌더 (lib/blocks.ts) ───────────────────────────────────
   email: {
-    /** 디자인 시스템 고정 색상. 비개발자도 항상 온브랜드. 본인 브랜드 색으로 교체. */
+    /** 디자인 시스템 고정 색상. 비개발자도 항상 온브랜드. 본인 브랜드 색으로 교체.
+     *  ⚠️ 키 이름(teal/mint/tealTint…)은 lib/blocks.ts 가 참조하므로 바꾸지 말 것 — 값만 교체.
+     *  현재값: Palette A — Indigo/Violet (teal=강조, mint=CTA). */
     colors: {
-      teal: "#0d8a7e",          // 강조/포인트 (kicker·번호·stat)
-      mint: "#50EACE",          // CTA 버튼 배경
-      ink: "#0a0a0a",           // 제목
-      body: "#4a4a4a",          // 본문
-      sub: "#6a6a6a",           // 보조 텍스트
-      muted: "#888888",         // 푸터/코멘트
-      hair: "#f0f0f0",          // 구분선
-      cardBorder: "#e0e3e6",    // 카드 테두리
-      tealTintBg: "#eef7f5",    // 배지 배경
-      tealTintBorder: "#d6ebe8",// 배지 테두리
+      teal: "#5b5bf0",          // 강조/포인트 (kicker·번호·stat) — Indigo
+      mint: "#7c7cff",          // CTA 버튼 배경 — Violet
+      ink: "#0f0f1a",           // 제목
+      body: "#4a4a55",          // 본문
+      sub: "#6a6a75",           // 보조 텍스트
+      muted: "#8a8a95",         // 푸터/코멘트
+      hair: "#eceef5",          // 구분선
+      cardBorder: "#e0e2ec",    // 카드 테두리
+      tealTintBg: "#eef0ff",    // 배지 배경
+      tealTintBorder: "#dce0ff",// 배지 테두리
     },
     mono: "Menlo,'SF Mono',Consolas,'Liberation Mono',monospace",
     /** 헤더(상단) 기본 로고 — spec.logo 미설정 시 사용. 본인 로고 공개 URL로 교체. */
