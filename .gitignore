@@ -5,6 +5,10 @@ node_modules/
 *.log
 .DS_Store
 
+# 브랜드 설정은 배포(회사/개인)별 파일 — 커밋하지 않는다.
+# 커밋되는 건 brand.config.example.ts 템플릿뿐. 처음 셋업: cp brand.config.example.ts brand.config.ts
+brand.config.ts
+
 # data/ 는 운영 상태(리스트·발송로그·로고)를 GitHub로 백업하기 위해 화이트리스트 방식.
 # deploy 스크립트가 prod→local 로 rsync 한 뒤 git push 하면 다음 항목만 추적된다.
 data/*

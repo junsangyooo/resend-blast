@@ -22,18 +22,19 @@ const base = (blocks: Block[]): TemplateSpec => ({
 });
 
 describe("renderTemplate (flat model)", () => {
-  it("wraps content in a 600px centered table on #f5f5f5", () => {
+  it("wraps content in a 600px centered table on the page background", () => {
     const html = renderTemplate(base([mk("text", { text: "안녕" })]));
-    expect(html).toContain("background-color:#f5f5f5");
+    expect(html).toContain(`background-color:${brand.email.surfaces.pageBg}`);
     expect(html).toContain('width="600"');
     expect(html).toContain("안녕");
   });
 
   it("renders logo header when showLogo is true and omits it when false", () => {
+    const logoUrl = brand.email.headerLogo.url;
     const withLogo = renderTemplate(base([mk("text", { text: "x" })]));
-    expect(withLogo).toContain("rldx-1-logo.png");
+    expect(withLogo).toContain(logoUrl);
     const noLogo = renderTemplate({ ...base([mk("text", { text: "x" })]), showLogo: false });
-    expect(noLogo).not.toContain("rldx-1-logo.png");
+    expect(noLogo).not.toContain(logoUrl);
   });
 
   it("tagline under logo is optional (shown only when set)", () => {

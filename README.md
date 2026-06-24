@@ -1,109 +1,81 @@
-# RLWRLD Email Blast
+# Email Blast
 
-RLWRLD 내부 일괄 발송 운영 도구.
+비개발자도 **HTML 없이 온브랜드 이메일을 만들어** 여러 수신자에게 발송하고, 발송 상태를
+추적하는 **화이트라벨 일괄 메일 발송 툴**. 행사 초청·리마인더·뉴스레터·고객 안내 등에 쓴다.
 
-- 도메인: `email-blast.rlwrld.co`
-- 인증: **Google Workspace 로그인** (@rlwrld.ai 계정만, `hd` 클레임 + 이메일 도메인 AND 검증). 세션은 HS256 JWT 쿠키
-- 발송: Resend, 발신자 화이트리스트 강제 (`lib/config.ts`)
-- **화이트라벨**: 회사 종속 값(브랜드·도메인·로고·색상)은 `brand.config.ts` 한 곳. 다른 회사/개인용 전환은 `docs/WHITELABEL.md` 참고
-- 트래킹: Resend Full access key → 발송별 send 파일 + 자동 갱신
-- 템플릿: 파일 기반 (`templates/{name}.html` + `.json` spec) + UI에서 생성
-- 리스트: 파일 기반 (`data/lists/{slug}.json`) — CSV/Excel import 지원, 다중선택 발송
+> 회사/개인 누구나 **`brand.config.ts`(공개 브랜드) + `.env.local`(비밀 키)** 두 파일만
+> 채우면 자기 브랜드·계정·디자인으로 동작한다. 코드는 건드리지 않는다.
 
-## 개발
+## 핵심 기능
+
+- **블록 조립기** — 제목·문단·버튼·배지·번호목록·어젠다·그리드·이미지 블록을 쌓아 메일 작성.
+  색·글꼴·간격은 디자인 시스템으로 고정돼 **항상 온브랜드**(임의 px·hex 불가).
+- **개인화 치환** — `{{name}}` `{{firstName}}` `{{name|기본값}}` `{{email}}` 을 수신자별로 치환
+  (본문·제목 모두). 미리보기와 실발송이 동일 로직.
+- **수신자 리스트** — CSV/Excel 임포트(헤더 자동 매칭) 또는 자유 텍스트 붙여넣기. 다중 리스트 + ad-hoc 병행 발송.
+- **발송 + 진행 추적** — Resend로 1:1 발송, NDJSON 스트리밍으로 건별 진행 표시. 클라이언트가
+  끊겨도 발송은 계속되고 결과는 파일에 남는다.
+- **트래킹** — 발송 단위 카드 + 수신자별 라이브 상태(delivered/opened/bounced…) 조회.
+- **수신거부/반송 관리** — 서명된 수신거부 링크, 억제 목록 자동 반영(컴플라이언스 푸터 포함).
+- **두 가지 인증** — `brand.config` 한 줄로 전환:
+  - **비밀번호 모드** — 단일 비밀번호 게이트(외부 의존성 0, 가장 빠른 시작)
+  - **Google 모드** — Google Workspace 도메인 로그인
+- **DB 없음** — 상태는 파일(`data/`, `templates/`)로 저장. 운영 부담이 작다.
+
+## 개인화할 수 있는 것 (코드 수정 없이)
+
+| 무엇 | 어디서 |
+|---|---|
+| 회사명·앱 제목·도메인·홈페이지 | `brand.config.ts` |
+| **디자인 색상**(이메일 + 앱 콘솔 통합 팔레트) | `brand.config.ts` → 디자인 토큰 |
+| 로고·소셜 아이콘·링크 | `brand.config.ts` |
+| 발신자(From)·기본 회신(Reply-To)·컴플라이언스 푸터 | `brand.config.ts` |
+| **로그인 방식**(비밀번호 ↔ Google) | `brand.config.ts` → `auth.mode` |
+| 이미지 저장 백엔드(Azure / R2 / …) | `brand.config.ts` → `assets.provider` + `.env.local` |
+| 모든 비밀 키 | `.env.local` |
+
+→ **처음 셋업 가이드는 [`docs/SETUP.md`](docs/SETUP.md)**, 화이트라벨 구조 설명은
+[`docs/WHITELABEL.md`](docs/WHITELABEL.md).
+
+## 빠른 시작
 
 ```bash
+git clone <your-repo-url> && cd email-blast
 npm install
-cp ~/.claude/secrets/.env  .env.local   # 시크릿 동기화 (또는 직접 작성)
-npm run dev                              # http://localhost:3001
-npm test                                 # vitest (lib/blocks, lib/session)
+
+cp brand.config.example.ts brand.config.ts   # 브랜드 설정 (공개)
+cp .env.local.example .env.local              # 비밀 키 (비공개)
+# → 두 파일을 본인 값으로 채운다 (docs/SETUP.md 참고)
+
+npm run dev      # http://localhost:3001
+npm test         # vitest (렌더러·세션·발송 가드)
+npm run build    # 프로덕션 빌드
 ```
 
-env 변수(비밀): `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `AUTH_SESSION_SECRET` / `RESEND_RLWRLD_API_KEY` / `RESEND_EMAIL_TRACKING_API_KEY` / `AZURE_STORAGE_ACCOUNT` / `AZURE_STORAGE_KEY` / `AZURE_STORAGE_CONTAINER`
+## 스택
 
-로그인/발신 도메인은 env가 아니라 `brand.config.ts`(`auth.loginDomain` / `auth.senderDomain`)에서 관리한다.
+- **Next.js 14 (App Router) + React 18 + TypeScript + Tailwind**
+- 발송: **Resend** SDK
+- 이미지: 스토리지 어댑터 추상화(기본 Azure Blob, R2/S3 등 교체 가능)
+- 인증: 비밀번호 게이트 또는 Google OAuth + HS256 JWT 세션 쿠키
+- 저장: 파일 기반(`data/`, `templates/`) — 별도 DB 불필요
 
-OAuth redirect URI를 Google Console에 등록: `{origin}/api/auth/google/callback` (localhost:3001 + 배포 도메인 각각).
+## 구조 (요약)
 
-## 배포
-
-```bash
-./deploy-email-blast         # 코드+env push → 빌드 → restart (실패 시 자동 롤백)
-./deploy-email-blast backup  # 프로덕션 templates/ + data/ → GitHub 백업
-./deploy-email-blast logs    # 실시간 로그
-./deploy-email-blast status  # 서비스 상태
+```
+brand.config.ts        ★브랜드·디자인·인증방식 단일 설정 (gitignore — example 에서 복사)
+brand.config.example.ts  위 파일의 커밋용 템플릿
+.env.local.example     비밀 키 템플릿
+app/                   페이지 + API 라우트(인증·발송·리스트·템플릿·업로드 …)
+components/            발송 폼·트래킹·블록 조립기·설정 등 UI
+lib/                   blocks(렌더러)·personalize·lists·send-log·senders·admins·storage·session …
+templates/             생성된 이메일 (HTML + 블록 spec)
+data/                  리스트·발송로그·발신자·관리자·수신거부 (파일 저장)
+docs/SETUP.md          ★처음 쓰는 사람용 셋업 가이드
+docs/WHITELABEL.md     화이트라벨 구조·이전 가이드
 ```
 
-특징:
-- **동시 배포 락**(`flock`): 두 사람이 동시에 배포 시도하면 두 번째는 거부
-- **자동 롤백**: 서버 빌드/재시작 실패 시 이전 commit SHA로 되돌리고 재기동
-- **상태 백업**: `templates/`와 `data/`(리스트·발송로그)를 매 배포마다 GitHub에 백업
+## 라이선스
 
-첫 배포 절차:
-1. `./deploy-email-blast init` 실행 → 출력된 systemd unit + Caddy 설정을 미니PC에서 실행
-2. DNS A 레코드 `email-blast.rlwrld.co` → 미니PC IP 등록
-3. Caddy가 자동으로 Let's Encrypt SSL 발급 (별도 certbot 불필요)
-4. `.env.local` 작성 후 `./deploy-email-blast`
-
-## 핵심 워크플로우
-
-### 1) 수신자 리스트 만들기
-좌측 rail "리스트" → ＋ 새 리스트 → 이름 입력 → **CSV/Excel 임포트** 또는 직접 입력
-- CSV/Excel: 1열(email) 또는 2열(email, name). 헤더 자동 감지 (email/name/이메일/이름)
-- 클라이언트 사이드 파싱 (SheetJS) — 명단이 서버 안 거침
-- 합치기 / 덮어쓰기 모드 선택
-- **권한**: 모두 보기·편집 가능, **삭제는 생성자만**
-
-### 2) 템플릿 만들기
-"템플릿" 메뉴 → "블록으로 만들기" (권장) 또는 "HTML 직접 입력"
-- 블록: Hero / 문단 / 번호 목록 / 어젠다 / 이미지 / CTA
-- 디자인 시스템 고정 (`lib/blocks.ts`) — HTML 몰라도 온브랜드
-- 이미지는 Azure Blob에 업로드 (PNG/JPG/GIF/WEBP, magic byte 검증)
-
-### 3) 발송
-메인 화면:
-1. 템플릿 선택
-2. 리스트 다중 선택 (체크박스) + 필요시 ad-hoc 직접 입력
-3. 발송하기 → **확인 모달에서 리스트명·From·subject·최초 10명 명단 확인**
-4. SSE 진행 표시. 발송 중 페이지 이탈 시 경고
-5. 완료 후 실패 건은 클립보드 복사 버튼 제공
-
-### 4) 트래킹
-좌측 rail "로그" → **send 단위 카드** (발송 1건 = 카드 1개)
-- 리스트명 칩 클릭 → 해당 리스트의 전체 발송 이력으로 필터
-- 카드 클릭 → 수신자별 상태 상세 모달 (Resend 라이브 상태 조회)
-
-## 발신자(From) 추가
-`lib/config.ts`의 `FROM_WHITELIST` 배열에 추가:
-```ts
-export const FROM_WHITELIST = [
-  { value: "RLDX-1 by RLWRLD <launch@rlwrld.ai>", label: "RLDX-1 (launch@)" },
-  { value: "RLWRLD Events <events@rlwrld.ai>", label: "Events" }, // 추가 예시
-];
-```
-@rlwrld.ai 도메인 외에는 자동으로 거부됨.
-
-## 데이터 모델
-```
-data/
-  lists/{slug}.json     # 수신자 리스트 (atomic write)
-  sends/{id}.json       # 발송 1건 = 1파일. 동시쓰기 충돌 없음
-  sent-ids.json.legacy  # 마이그레이션 전 발송 (읽기 전용)
-  logos.json            # 업로드된 헤더 로고 메타
-templates/
-  {name}.html           # 렌더 결과
-  {name}.json           # 블록 spec (재편집용)
-  _meta.json            # 제목·설명·archived 플래그
-```
-프로덕션이 원본. 배포 시 자동으로 GitHub 백업.
-
-## 보안 메모
-- `.env.example` 미사용. 시크릿은 `~/.claude/secrets/.env`만 사용.
-- 이미지 업로드: SVG 차단, magic byte로 실제 형식 검증, content-type 신뢰 안 함.
-- OAuth redirect: `hd` 클레임 + 이메일 도메인 AND 검증, `//evil.com` open redirect 차단.
-- 발송: `from` 화이트리스트 강제. UI 우회해도 서버에서 거부.
-
-## 테스트
-```bash
-npm test   # lib/blocks (HTML escape, 디자인 시스템) + lib/session (JWT)
-```
+내부/개인용. 배포 전 발신자 물리주소(`SENDER_POSTAL_ADDRESS`)와 발송 도메인 인증(SPF/DKIM)을
+반드시 설정한다 — 미설정 시 메일이 스팸 처리되거나 법적 의무를 위반할 수 있다(자세히는 SETUP.md).

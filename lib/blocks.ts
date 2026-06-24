@@ -33,6 +33,10 @@ const CARD_BORDER = C.cardBorder;
 const TEAL_TINT_BG = C.tealTintBg;
 const TEAL_TINT_BORDER = C.tealTintBorder;
 const MONO = brand.email.mono;
+// 이메일 골격 색(페이지 배경·카드) — brand.config.email.surfaces 에서 주입.
+const PAGE_BG = brand.email.surfaces.pageBg;
+const SURFACE = brand.email.surfaces.card;
+const SURFACE_BORDER = brand.email.surfaces.cardBorder;
 
 const LOGO_URL = brand.email.headerLogo.url;
 const RLWRLD_LOGO = brand.email.footerLogo.url;
@@ -490,11 +494,11 @@ export function renderTemplate(spec: TemplateSpec): string {
   const W = specWidthPx(spec);
 
   const preheader = spec.preheader?.trim()
-    ? `<div style="display:none; max-height:0; overflow:hidden; font-size:1px; line-height:1px; color:#f5f5f5;">${esc(spec.preheader)}</div>`
+    ? `<div style="display:none; max-height:0; overflow:hidden; font-size:1px; line-height:1px; color:${PAGE_BG};">${esc(spec.preheader)}</div>`
     : "";
 
   const card = rows
-    ? `<tr><td style="background-color:#ffffff; border:1px solid #e5e5e5; border-radius:8px; overflow:hidden;">
+    ? `<tr><td style="background-color:${SURFACE}; border:1px solid ${SURFACE_BORDER}; border-radius:8px; overflow:hidden;">
         <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="padding:24px 0;">${rows}</table>
       </td></tr>`
     : "";
@@ -502,9 +506,9 @@ export function renderTemplate(spec: TemplateSpec): string {
   // 반응형 그리드용 미디어쿼리(지원 클라이언트 한정). 미지원 시 인라인 스타일로 폴백.
   const responsive = `<style>@media screen and (max-width:480px){.eb-col{display:block!important;width:100%!important}}</style>`;
 
-  return `${responsive}<div style="margin:0; padding:0; background-color:#f5f5f5;">
+  return `${responsive}<div style="margin:0; padding:0; background-color:${PAGE_BG};">
   ${preheader}
-  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f5f5f5; padding:0;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:${PAGE_BG}; padding:0;">
     <tr><td align="center" style="padding:40px 16px;">
       <table width="${W}" cellpadding="0" cellspacing="0" role="presentation" style="max-width:${W}px; width:100%;">
         ${spec.showLogo ? renderLogo(spec) : ""}

@@ -37,6 +37,8 @@ export async function listAdmins(): Promise<AdminEntry[]> {
 export async function isAdminAsync(email?: string | null): Promise<boolean> {
   if (!email) return false;
   const e = email.toLowerCase();
+  // password 모드: 단일 운영자(brand.auth.operatorEmail)는 항상 관리자.
+  if (brand.auth.mode === "password" && e === brand.auth.operatorEmail.toLowerCase()) return true;
   if (adminEmails().includes(e)) return true;
   return (await readFileAdmins()).includes(e);
 }

@@ -47,13 +47,24 @@ export function isFromAllowed(value: string): boolean {
   return ALLOWED_FROM_DOMAIN.test(value);
 }
 
+/** "Name <a@b.com>" 또는 "a@b.com" 에서 주소부만 추출 (lowercase). 실패 시 "". */
+function emailAddr(v: string | undefined | null): string {
+  const s = String(v ?? "").trim();
+  const m = s.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>\s*$/);
+  if (m) return m[1].toLowerCase();
+  return /^[^<>@\s]+@[^<>@\s]+$/.test(s) ? s.toLowerCase() : "";
+}
+const REPLY_TO_DEFAULT_ADDR = emailAddr(REPLY_TO_DEFAULT);
+
 /** reply-to 검증: 비어있으면 빈 문자열(=Reply-To 헤더 미부착 → 회신이 From 으로).
- *  값이 있으면 @rlwrld.ai 형식만 허용, 아니면 빈 문자열(잘못된 기본값 주입 방지). */
+ *  허용: (a) senderDomain 도메인 주소, 또는 (b) 설정된 외부 회신주소(brand.senders.replyToDefault).
+ *  → 운영자가 의도한 외부(gmail 등) 회신은 막지 않되, 임의 외부 주소 주입은 차단. */
 export function resolveReplyTo(input: string | undefined | null): string {
   const v = String(input ?? "").trim();
   if (!v) return "";
-  // "Name <a@rlwrld.ai>" 또는 "a@rlwrld.ai" 모두 허용
-  return isFromAllowed(v) ? v : "";
+  if (isFromAllowed(v)) return v;
+  if (REPLY_TO_DEFAULT_ADDR && emailAddr(v) === REPLY_TO_DEFAULT_ADDR) return v;
+  return "";
 }
 
 // ── 발송 남용 방지 상한 (환경변수로 조정 가능) ──

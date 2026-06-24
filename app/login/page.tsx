@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { brand } from "@/brand.config";
 
 const ERROR_MSG: Record<string, string> = {
@@ -19,10 +19,16 @@ export default function LoginPage() {
   );
 }
 
+function safeNext(next: string): string {
+  // open-redirect 방지: 단일 슬래시로 시작하는 내부 경로만 허용.
+  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 function LoginInner() {
   const sp = useSearchParams();
-  const next = sp.get("next") || "/";
+  const next = safeNext(sp.get("next") || "/");
   const error = sp.get("error");
+  const isPassword = brand.auth.mode === "password";
 
   return (
     <div className="min-h-dvh flex items-center justify-center px-4">
@@ -30,26 +36,90 @@ function LoginInner() {
         <div>
           <div className="kicker">Internal Tool</div>
           <h1 className="mt-1 text-xl font-semibold">{brand.ui.login.title}</h1>
-          <p className="mt-1 text-[12px] text-muted">{brand.ui.login.subtitle}</p>
+          <p className="mt-1 text-[12px] text-muted">
+            {isPassword ? brand.ui.login.passwordSubtitle : brand.ui.login.subtitle}
+          </p>
         </div>
 
-        {error && (
+        {error && !isPassword && (
           <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
             {ERROR_MSG[error] ?? "로그인에 실패했습니다."}
           </div>
         )}
 
-        <a
-          href={`/api/auth/google?next=${encodeURIComponent(next)}`}
-          className="flex items-center justify-center gap-2.5 w-full rounded-lg bg-white text-[#1f1f1f] border border-border font-semibold text-sm py-2.5 hover:bg-white/90 hover:border-brand/50 active:scale-[0.99] transition"
-        >
-          <GoogleMark />
-          Google로 로그인
-        </a>
-
-        <p className="text-[11px] text-muted text-center">{brand.ui.login.domainNotice}</p>
+        {isPassword ? <PasswordForm next={next} /> : <GoogleButton next={next} />}
       </div>
     </div>
+  );
+}
+
+function PasswordForm({ next }: { next: string }) {
+  const router = useRouter();
+  const [password, setPassword] = useState("");
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!password || loading) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (res.ok) {
+        // 세션 쿠키가 설정됐다. 의도한 경로로 이동.
+        router.replace(next);
+        router.refresh();
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      setErr(data?.error || brand.ui.login.passwordError);
+    } catch {
+      setErr("요청에 실패했습니다. 다시 시도해 주세요.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <input
+        type="password"
+        className="input"
+        placeholder="비밀번호"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        autoFocus
+        autoComplete="current-password"
+      />
+      {err && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+          {err}
+        </div>
+      )}
+      <button type="submit" className="btn-primary w-full" disabled={loading || !password}>
+        {loading ? "확인 중…" : "들어가기"}
+      </button>
+    </form>
+  );
+}
+
+function GoogleButton({ next }: { next: string }) {
+  return (
+    <>
+      <a
+        href={`/api/auth/google?next=${encodeURIComponent(next)}`}
+        className="flex items-center justify-center gap-2.5 w-full rounded-lg bg-white text-[#1f1f1f] border border-border font-semibold text-sm py-2.5 hover:bg-white/90 hover:border-brand/50 active:scale-[0.99] transition"
+      >
+        <GoogleMark />
+        Google로 로그인
+      </a>
+      <p className="text-[11px] text-muted text-center">{brand.ui.login.domainNotice}</p>
+    </>
   );
 }
 
