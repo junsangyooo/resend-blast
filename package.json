@@ -1,5 +1,5 @@
 {
-  "name": "email-blast",
+  "name": "resend-blast",
   "version": "0.1.0",
   "private": true,
   "engines": {

@@ -39,7 +39,7 @@ const SURFACE = brand.email.surfaces.card;
 const SURFACE_BORDER = brand.email.surfaces.cardBorder;
 
 const LOGO_URL = brand.email.headerLogo.url;
-const RLWRLD_LOGO = brand.email.footerLogo.url;
+const FOOTER_LOGO = brand.email.footerLogo.url;
 const X_ICON = brand.email.socialIcons.x;
 const LI_ICON = brand.email.socialIcons.linkedin;
 const YT_ICON = brand.email.socialIcons.youtube;
@@ -474,7 +474,7 @@ function renderFooter(footer?: TemplateSpec["footer"]): string {
     <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 0 20px 0;"><tr><td style="border-top:1px solid ${HAIR};"></td></tr></table>
     ${social}
     <p style="margin:0 0 8px 0;">
-      <a target="_blank" rel="noopener noreferrer" href="${url(brand.email.footerLogo.link)}" style="display:inline-block; text-decoration:none;"><img src="${RLWRLD_LOGO}" width="${brand.email.footerLogo.width}" height="${brand.email.footerLogo.height}" alt="${esc(brand.email.footerLogo.alt)}" style="display:block; border:0; margin:0 auto;"></a>
+      <a target="_blank" rel="noopener noreferrer" href="${url(brand.email.footerLogo.link)}" style="display:inline-block; text-decoration:none;"><img src="${FOOTER_LOGO}" width="${brand.email.footerLogo.width}" height="${brand.email.footerLogo.height}" alt="${esc(brand.email.footerLogo.alt)}" style="display:block; border:0; margin:0 auto;"></a>
     </p>
     ${senderLine}
     ${unsubLine}

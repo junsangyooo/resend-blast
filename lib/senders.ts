@@ -8,7 +8,7 @@
  *  - otherwise every user can send via the synthesized "my account" virtual option (own address) without storing it
  *
  * Legacy from.json entries (no scope recorded) are migrated to personal on read —
- * owner is inferred from the address part of value (e.g., "Jacey Cho <jacey.cho@rlwrld.ai>").
+ * owner is inferred from the address part of value (e.g., "Jane Doe <jane@send.example.com>").
  * File writes use atomic + per-key lock (same pattern as other operational data).
  */
 import fs from "fs/promises";

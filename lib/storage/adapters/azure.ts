@@ -17,7 +17,7 @@ export class AzureAdapter implements StorageAdapter {
   async put(data: Buffer, contentType: string, ext: string): Promise<string> {
     const account = process.env.AZURE_STORAGE_ACCOUNT;
     const key = process.env.AZURE_STORAGE_KEY;
-    const container = process.env.AZURE_STORAGE_CONTAINER ?? "rldx-1-launch";
+    const container = process.env.AZURE_STORAGE_CONTAINER ?? "email-blast-assets";
 
     if (!account || !key) {
       throw new Error("AZURE_STORAGE_ACCOUNT / AZURE_STORAGE_KEY 환경변수가 없습니다");

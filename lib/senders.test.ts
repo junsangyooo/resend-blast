@@ -3,11 +3,11 @@ import { addressOf, displayNameFromEmail, myAccountOption } from "./senders";
 
 describe("addressOf", () => {
   it("extracts from angle form", () => {
-    expect(addressOf("Jacey Cho <jacey.cho@rlwrld.ai>")).toBe("jacey.cho@rlwrld.ai");
+    expect(addressOf("John Smith <john.smith@example.com>")).toBe("john.smith@example.com");
     expect(addressOf("X <A@B.COM>")).toBe("a@b.com");
   });
   it("accepts bare address", () => {
-    expect(addressOf("launch@rlwrld.ai")).toBe("launch@rlwrld.ai");
+    expect(addressOf("launch@example.com")).toBe("launch@example.com");
   });
   it("null for garbage", () => {
     expect(addressOf("not an email")).toBeNull();
@@ -17,17 +17,17 @@ describe("addressOf", () => {
 
 describe("displayNameFromEmail", () => {
   it("title-cases local part tokens", () => {
-    expect(displayNameFromEmail("junsang.yoo@rlwrld.ai")).toBe("Junsang Yoo");
-    expect(displayNameFromEmail("jane_doe@rlwrld.ai")).toBe("Jane Doe");
-    expect(displayNameFromEmail("launch@rlwrld.ai")).toBe("Launch");
+    expect(displayNameFromEmail("jane.doe@example.com")).toBe("Jane Doe");
+    expect(displayNameFromEmail("jane_doe@example.com")).toBe("Jane Doe");
+    expect(displayNameFromEmail("launch@example.com")).toBe("Launch");
   });
 });
 
 describe("myAccountOption", () => {
   it("builds a personal virtual option for the viewer", () => {
-    const o = myAccountOption("Junsang.Yoo@rlwrld.ai");
-    expect(o.value).toBe("Junsang Yoo <junsang.yoo@rlwrld.ai>");
+    const o = myAccountOption("Jane.Doe@example.com");
+    expect(o.value).toBe("Jane Doe <jane.doe@example.com>");
     expect(o.scope).toBe("personal");
-    expect(o.owner).toBe("junsang.yoo@rlwrld.ai");
+    expect(o.owner).toBe("jane.doe@example.com");
   });
 });

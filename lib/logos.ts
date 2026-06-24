@@ -1,8 +1,8 @@
 /**
  * Header logo registry.
- * Built-in logos (RLWRLD / RLDX-1) are hardcoded — always present.
+ * Built-in logos come from brand.config.logos — always present.
  * Uploaded custom logos accumulate in data/logos.json (gitignored, server-persisted).
- * The image files themselves go to the configured storage backend (lib/storage, default Azure Blob).
+ * The image files themselves go to the configured storage backend (lib/storage, default local disk).
  */
 import fs from "fs/promises";
 import path from "path";

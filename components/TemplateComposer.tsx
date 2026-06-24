@@ -75,7 +75,7 @@ const PRESETS: { id: string; t: string; d: string; goal: string; make: () => Tem
     mk("button", { label: "오시는 길", url: "", arrow: false })] }) },
   { id: "news", t: "뉴스레터", d: "번호 목록 + 하이라이트 카드", goal: "월간 소식·업데이트를 정기 발송할 때", make: () => ({ subject: `${CO} 5월 소식`, preheader: "이번 달 주요 업데이트", showLogo: true, showFooter: true, footer: { showSocial: true, showUnsubscribe: true }, blocks: [
     mk("kicker", { text: "MONTHLY UPDATE" }), mk("heading", { text: `5월의 ${CO}` }),
-    mk("numbered", { items: [{ title: "RLDX-1 공개", desc: "첫 파운데이션 모델" }, { title: "데모데이", desc: "6월 10일" }, { title: "채용 확대", desc: "전 직군" }] }),
+    mk("numbered", { items: [{ title: "신제품 공개", desc: "첫 제품 소개" }, { title: "데모데이", desc: "6월 10일" }, { title: "채용 확대", desc: "전 직군" }] }),
     mk("divider"),
     mk("grid", { cols: 2, cardType: "stat", cards: [{ value: "120+", title: "데모 신청" }, { value: "8", title: "신규 파트너" }] }),
     mk("button", { label: "전체 소식 보기", url: "", arrow: false })] }) },
@@ -186,9 +186,9 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     optStash.current = {};
   }, [open, editName]);
 
-  /* start screen → enter editor. Inherit the width choice and default the logo to RLWRLD. */
+  /* start screen → enter editor. Inherit the width choice and default the logo to the first one. */
   function defaultLogoSpec(): TemplateSpec["logo"] | undefined {
-    const l = logos.find((x) => x.id === "rlwrld") ?? logos[0];
+    const l = logos[0];
     return l ? { url: l.url, width: l.width, alt: l.label } : undefined;
   }
   function startWith(makeSpec: (() => TemplateSpec) | null) {
@@ -424,7 +424,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   }, [addAt, spec.blocks.length]);
 
   if (!open) return null;
-  const currentLogo = logos.find((l) => l.url === spec.logo?.url) ?? logos.find((l) => l.id === "rlwrld") ?? logos[0];
+  const currentLogo = logos.find((l) => l.url === spec.logo?.url) ?? logos[0];
 
   return (
     <div className="tcOverlay">

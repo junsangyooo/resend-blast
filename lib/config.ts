@@ -9,7 +9,7 @@
 import { brand } from "../brand.config";
 
 export type FromOption = {
-  /** The actual RFC 5322 from value (e.g., "RLDX-1 by RLWRLD <launch@rlwrld.ai>") */
+  /** The actual RFC 5322 from value (e.g., "Acme <hello@send.example.com>") */
   value: string;
   /** UI display name */
   label: string;
@@ -42,7 +42,7 @@ export function resolveFrom(input: string | undefined | null): string {
   return FROM_DEFAULT;
 }
 
-/** Safety net: enforce that no from/reply-to outside the @rlwrld.ai domain is used by any path. */
+/** Safety net: enforce that no from/reply-to outside the sender domain is used by any path. */
 export function isFromAllowed(value: string): boolean {
   return ALLOWED_FROM_DOMAIN.test(value);
 }

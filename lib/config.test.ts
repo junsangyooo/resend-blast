@@ -33,20 +33,20 @@ describe("resolveReplyTo", () => {
 
 describe("canManageAsync / isAdmin", () => {
   it("legacy (no owner) is manageable by anyone", async () => {
-    expect(await canManageAsync(undefined, "a@rlwrld.ai")).toBe(true);
-    expect(await canManageAsync("", "a@rlwrld.ai")).toBe(true);
+    expect(await canManageAsync(undefined, "a@example.com")).toBe(true);
+    expect(await canManageAsync("", "a@example.com")).toBe(true);
   });
   it("owner can manage, others cannot", async () => {
-    expect(await canManageAsync("a@rlwrld.ai", "a@rlwrld.ai")).toBe(true);
-    expect(await canManageAsync("a@rlwrld.ai", "b@rlwrld.ai")).toBe(false);
-    expect(await canManageAsync("a@rlwrld.ai", null)).toBe(false);
+    expect(await canManageAsync("a@example.com", "a@example.com")).toBe(true);
+    expect(await canManageAsync("a@example.com", "b@example.com")).toBe(false);
+    expect(await canManageAsync("a@example.com", null)).toBe(false);
   });
   it("admins can manage anything (env seed)", async () => {
-    process.env.ADMIN_EMAILS = "boss@rlwrld.ai, ops@rlwrld.ai";
-    expect(isAdmin("boss@rlwrld.ai")).toBe(true);
-    expect(isAdmin("BOSS@rlwrld.ai")).toBe(true);
-    expect(isAdmin("rando@rlwrld.ai")).toBe(false);
-    expect(await isAdminAsync("ops@rlwrld.ai")).toBe(true);
-    expect(await canManageAsync("a@rlwrld.ai", "ops@rlwrld.ai")).toBe(true);
+    process.env.ADMIN_EMAILS = "boss@example.com, ops@example.com";
+    expect(isAdmin("boss@example.com")).toBe(true);
+    expect(isAdmin("BOSS@example.com")).toBe(true);
+    expect(isAdmin("rando@example.com")).toBe(false);
+    expect(await isAdminAsync("ops@example.com")).toBe(true);
+    expect(await canManageAsync("a@example.com", "ops@example.com")).toBe(true);
   });
 });

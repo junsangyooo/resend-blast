@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { contentHash, globalThrottle } from "./send-guards";
 
 describe("contentHash", () => {
-  const base = { sentBy: "me@rlwrld.ai", from: "launch@rlwrld.ai", templateName: "t", subject: "s" };
+  const base = { sentBy: "me@example.com", from: "launch@example.com", templateName: "t", subject: "s" };
 
   it("is stable regardless of recipient order / case", () => {
     const a = contentHash({ ...base, emails: ["A@x.com", "b@y.com"] });

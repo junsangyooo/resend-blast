@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${originFromRequest(req)}/api/auth/google/callback`;
     const info = await exchangeCode(code, redirectUri);
     const email = verifyDomain(info);
-    if (!email) return fail(req, "domain"); // not @rlwrld.ai
+    if (!email) return fail(req, "domain"); // domain not allowed
 
     const token = await createSession(email);
     // Prevent open redirect: only allow paths starting with a single non-slash slash ( blocks "//evil.com" )

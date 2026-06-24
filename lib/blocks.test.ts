@@ -47,17 +47,17 @@ describe("renderTemplate (flat model)", () => {
   it("top heading: mono large; kicker teal; mint button with url; badge", () => {
     const html = renderTemplate(base([
       mk("kicker", { text: "You're invited" }),
-      mk("heading", { text: "Dexterity Night\nin Seoul" }),
+      mk("heading", { text: "Launch Night\nin Seoul" }),
       mk("badge", { line1: "2026.6.10", line2: "라움아트센터" }),
       mk("text", { text: "한 줄" }),
-      mk("button", { label: "참석 신청", url: "https://seoul-event-form.rlwrld.co" }),
+      mk("button", { label: "참석 신청", url: "https://seoul-event-form.example.com" }),
     ]));
     expect(html).toContain("You&#39;re invited");
     expect(html).toMatch(/font-family:Menlo/i);
     expect(html).toContain(TEAL);
     expect(html).toContain(MINT);
-    expect(html).toContain("https://seoul-event-form.rlwrld.co");
-    expect(html).toContain("Dexterity Night<br>in Seoul");
+    expect(html).toContain("https://seoul-event-form.example.com");
+    expect(html).toContain("Launch Night<br>in Seoul");
     expect(html).toContain("2026.6.10");
   });
 
@@ -137,7 +137,7 @@ describe("renderTemplate (flat model)", () => {
 
   it("footer toggles: social + unsubscribe", () => {
     const off = renderTemplate({ ...base([mk("text", { text: "x" })]), footer: { showSocial: false, showUnsubscribe: false } });
-    expect(off).not.toContain("youtube.com/@rlwrld.dexterity");
+    expect(off).not.toContain("youtube.com/@example");
     expect(off).not.toContain(UNSUB_PLACEHOLDER);
   });
 });

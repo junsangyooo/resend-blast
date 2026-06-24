@@ -220,7 +220,7 @@ export default function AdminSettings({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[10px] text-muted mb-0.5">이름 (수신자가 확인 가능)</label>
-                    <input className="input py-1.5 text-[12px]" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="예: RLWRLD Events" />
+                    <input className="input py-1.5 text-[12px]" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="예: Acme Events" />
                   </div>
                   <div>
                     <label className="block text-[10px] text-muted mb-0.5">이메일 주소</label>

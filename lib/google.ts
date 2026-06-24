@@ -87,7 +87,7 @@ function decodeIdToken(idToken: string): IdInfo {
 }
 
 /** Company domain check. Returns the normalized email if it passes, else null.
- * The hd claim is required to block @rlwrld.ai emails created outside Workspace (AND condition). */
+ * The hd claim is required to block login-domain emails created outside Workspace (AND condition). */
 export function verifyDomain(info: IdInfo): string | null {
   const email = (info.email ?? "").toLowerCase().trim();
   const verified = info.email_verified === true || info.email_verified === "true";
