@@ -14,6 +14,7 @@
 import { brand } from "../../brand.config";
 import type { StorageAdapter } from "./types";
 import { AzureAdapter } from "./adapters/azure";
+import { LocalAdapter } from "./adapters/local";
 import {
   EXT_BY_TYPE,
   detectImageType,
@@ -22,6 +23,7 @@ import {
 
 // ── 어댑터 레지스트리 ★새 스토리지는 여기에 한 줄 추가 ──
 const ADAPTERS: Record<string, () => StorageAdapter> = {
+  local: () => new LocalAdapter(), // 외부 계정 0개 (기본) — 디스크 저장 + 앱이 서빙
   azure: () => new AzureAdapter(),
 };
 

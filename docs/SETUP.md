@@ -102,21 +102,34 @@ auth: { mode: "google", loginDomain: "acme.com", ... }
 
 ---
 
-## 4. 이미지 저장소 (선택 — 이미지 업로드 쓸 때만)
+## 4. 이미지 — 저장 백엔드 + 전달 방식
 
-`brand.config.ts` 의 `assets.provider` 로 백엔드를 고르고, 키는 `.env.local` 에.
+이미지는 **2개 축**으로 설정한다 (`brand.config.ts` 의 `assets`).
 
-**기본: Azure Blob** (`provider: "azure"`)
+### 4-1. 저장 백엔드 `assets.provider` — 어디에 저장하나
+
+**기본: `"local"`** — 외부 계정 0개. 업로드 이미지를 서버 디스크(`data/uploads/`)에 저장.
+별도 설정 불필요.
+
+**대안: `"azure"`** (오브젝트 스토리지)
 ```
 AZURE_STORAGE_ACCOUNT=
 AZURE_STORAGE_KEY=          # az storage account keys list -n <account>
 AZURE_STORAGE_CONTAINER=
 ```
+**Cloudflare R2 / AWS S3** 등은 어댑터(`lib/storage/adapters/<name>.ts`)를 추가하고
+`lib/storage/index.ts` 의 `ADAPTERS` 에 등록(상세: `docs/WHITELABEL.md` 3-1절).
 
-**대안: Cloudflare R2 / AWS S3** — egress 무료라 메일 이미지에 유리.
-어댑터(`lib/storage/adapters/<name>.ts`)를 추가하고 `lib/storage/index.ts` 의 `ADAPTERS` 에
-등록한 뒤 `provider` 를 바꾼다(상세: `docs/WHITELABEL.md` 3-1절). 반환 URL은 **인증 없이
-열리는 공개 URL**이어야 한다(메일 클라이언트가 외부에서 로드).
+### 4-2. 전달 방식 `assets.delivery` — 메일에 어떻게 싣나
+
+**기본: `"attach"`** — 발송 시 로컬 이미지를 **메일에 CID 인라인 첨부**(`<img src="cid:…">`).
+→ 외부 호스팅·공개 URL **불필요**. 개인·소수 발송에 최적.
+한도: 메일 1통당 base64 후 40MB. *주의: 수신자마다 이미지가 재전송되므로 대량 발송엔 비효율.*
+
+**`"hosted"`** — 이미지 URL 을 그대로 참조(메일 클라이언트가 외부에서 로드). 대량에 효율적.
+단 앱(local 서빙) 또는 스토리지가 **공개 도메인**으로 떠 있어야 한다.
+
+> 외부 CDN URL(예: 브랜드 로고)은 attach 모드에서도 그대로 hosted 로 남는다(로컬 업로드만 첨부).
 
 ---
 

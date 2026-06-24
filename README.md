@@ -31,7 +31,8 @@
 | 로고·소셜 아이콘·링크 | `brand.config.ts` |
 | 발신자(From)·기본 회신(Reply-To)·컴플라이언스 푸터 | `brand.config.ts` |
 | **로그인 방식**(비밀번호 ↔ Google) | `brand.config.ts` → `auth.mode` |
-| 이미지 저장 백엔드(Azure / R2 / …) | `brand.config.ts` → `assets.provider` + `.env.local` |
+| 이미지 저장 백엔드(**local**(기본) / Azure / R2 …) | `brand.config.ts` → `assets.provider` + `.env.local` |
+| **이미지 전달 방식**(메일 CID 첨부 ↔ 호스팅 URL) | `brand.config.ts` → `assets.delivery` |
 | 모든 비밀 키 | `.env.local` |
 
 → **처음 셋업 가이드는 [`docs/SETUP.md`](docs/SETUP.md)**, 화이트라벨 구조 설명은

@@ -15,6 +15,8 @@ import { suppressedSet, isSuppressed } from "@/lib/suppression";
 import { unsubscribeUrl, unsubscribeMailto } from "@/lib/unsubscribe";
 import { contentHash, globalThrottle } from "@/lib/send-guards";
 import { fillPlaceholders, fillSubject, UNSUB_PLACEHOLDER } from "@/lib/personalize";
+import { inlineLocalImages, type InlineImageAttachment } from "@/lib/email-images";
+import { brand } from "@/brand.config";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -198,6 +200,18 @@ export async function POST(req: NextRequest) {
 
   const mailtoUnsub = unsubscribeMailto();
 
+  // ── 이미지 전달 방식 (brand.config.assets.delivery) ──
+  // "attach": 본문의 로컬 이미지를 CID 인라인 첨부로 1회 변환 → 모든 수신자에 재사용
+  //           (이미지는 수신자 무관이라 base64 를 한 번만 읽는다). 외부 호스팅 불필요.
+  // "hosted": 변환 없이 이미지 URL 그대로(메일 클라이언트가 외부에서 로드).
+  let sendHtml = built.html;
+  let inlineAttachments: InlineImageAttachment[] | undefined;
+  if (brand.assets.delivery === "attach") {
+    const inlined = await inlineLocalImages(built.html);
+    sendHtml = inlined.html;
+    inlineAttachments = inlined.attachments.length ? inlined.attachments : undefined;
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
@@ -248,7 +262,7 @@ export async function POST(req: NextRequest) {
         // 광고 메일의 Gmail/Yahoo 원클릭 수신거부(보이지 않는 헤더)는 항상 동작하도록 보장.
         const includeUnsubHeader = !isTest && (hasUnsub || !!body.isAd);
         const unsubUrl = includeUnsubHeader ? unsubscribeUrl(to, sendId) : "#";
-        const html = fillPlaceholders(built.html, {
+        const html = fillPlaceholders(sendHtml, {
           name: rec.name,
           email: to,
           unsubscribeUrl: hasUnsub && !isTest ? unsubUrl : "#",
@@ -266,6 +280,7 @@ export async function POST(req: NextRequest) {
             const { data, error } = await resend.emails.send({
               // replyTo 가 비어있으면 헤더 미부착 → 수신자 회신이 From 주소로 감.
               from: finalFrom, to, ...(replyTo ? { replyTo } : {}), subject: recipientSubject, html, headers,
+              ...(inlineAttachments ? { attachments: inlineAttachments } : {}),
             });
             if (error) {
               lastErr = error.message ?? String(error);

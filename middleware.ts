@@ -11,6 +11,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith("/api/webhooks/") ||
     pathname.startsWith("/api/unsubscribe") ||
     pathname.startsWith("/api/resubscribe") ||
+    // 이메일 내 로컬 이미지(hosted 모드) — 메일 클라이언트가 세션 없이 로드해야 함.
+    pathname.startsWith("/api/assets/") ||
     pathname === "/api/health" ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico"

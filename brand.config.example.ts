@@ -144,9 +144,17 @@ export const brand = {
   // provider 만 바꾸면 스토리지가 교체된다 (어댑터: lib/storage/adapters/*).
   // ⚠️ 여기엔 provider 이름·공개 URL만. 자격증명(키)은 .env.local 에서.
   assets: {
-    /** 사용할 스토리지 어댑터 키 (lib/storage/index.ts 의 ADAPTERS 와 일치). */
-    provider: "azure",
-    /** 내장 로고·아이콘 호스팅 베이스 (메일에 박히는 이미지의 공개 URL). */
+    /** 이미지 저장 백엔드 (lib/storage/index.ts 의 ADAPTERS 와 일치).
+     *  "local" = 외부 계정 0개(서버 디스크 저장 + 앱이 /api/assets 로 서빙).
+     *  "azure" 등 = 오브젝트 스토리지(대량·CDN). 키는 .env.local. */
+    provider: "local",
+    /** 이미지 전달 방식 (둘 다 지원, 이 한 줄로 전환):
+     *   "attach" = 발송 시 로컬 이미지를 메일에 CID 인라인 첨부 → 외부 호스팅·공개 URL 불필요.
+     *              개인·소수 발송 최적(단, 수신자마다 이미지 재전송 → 대량엔 비효율). 메일당 40MB 한도.
+     *   "hosted" = 이미지 URL 그대로 참조(메일 클라이언트가 외부 로드). 대량에 효율적이나
+     *              앱(또는 스토리지)이 공개 도메인으로 떠 있어야 함. */
+    delivery: "attach" as "attach" | "hosted",
+    /** 내장 로고·아이콘 호스팅 베이스 (외부 CDN — attach 모드에서도 이 URL 은 hosted 로 남는다). */
     base: ASSET_BASE,
   },
 
