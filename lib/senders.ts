@@ -38,7 +38,7 @@ export function addressOf(value: string): string | null {
   return null;
 }
 
-/** Auto-generate a display name from the email local part: "junsang.yoo" → "Junsang Yoo". */
+/** Auto-generate a display name from the email local part: "jane.doe" → "Jane Doe". */
 export function displayNameFromEmail(email: string): string {
   const local = String(email ?? "").split("@")[0] ?? "";
   return local
