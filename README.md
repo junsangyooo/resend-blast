@@ -35,7 +35,8 @@
 | **이미지 전달 방식**(메일 CID 첨부 ↔ 호스팅 URL) | `brand.config.ts` → `assets.delivery` |
 | 모든 비밀 키 | `.env.local` |
 
-→ **처음 셋업 가이드는 [`docs/SETUP.md`](docs/SETUP.md)**, 화이트라벨 구조 설명은
+→ **처음 셋업 가이드는 [`docs/SETUP.md`](docs/SETUP.md)**, 이미지 파이프라인(첨부/호스팅·
+버킷 구축)은 [`docs/IMAGES.md`](docs/IMAGES.md), 화이트라벨 구조는
 [`docs/WHITELABEL.md`](docs/WHITELABEL.md).
 
 ## 빠른 시작

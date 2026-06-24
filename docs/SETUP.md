@@ -104,6 +104,9 @@ auth: { mode: "google", loginDomain: "acme.com", ... }
 
 ## 4. 이미지 — 저장 백엔드 + 전달 방식
 
+> **전체 파이프라인·인프라·연결 가이드(R2/S3 버킷 구축·어댑터 작성 포함)는
+> [`docs/IMAGES.md`](IMAGES.md).** 아래는 요약.
+
 이미지는 **2개 축**으로 설정한다 (`brand.config.ts` 의 `assets`).
 
 ### 4-1. 저장 백엔드 `assets.provider` — 어디에 저장하나
