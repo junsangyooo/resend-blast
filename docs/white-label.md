@@ -99,7 +99,7 @@ Image delivery is controlled by `assets.delivery` in `brand.config.ts`:
   Efficient at scale, but the app (or storage) must be reachable on a public domain.
 
 In `"hosted"` mode the images **must** be served from a public URL (mail clients load them externally).
-See [docs/IMAGES.md](./IMAGES.md) for the full image guide.
+See [docs/images.md](./images.md) for the full image guide.
 
 1. Prepare logo PNGs (header + footer) and social icons (X / LinkedIn / YouTube)
 2. Upload to your storage and obtain public URLs

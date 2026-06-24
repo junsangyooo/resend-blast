@@ -218,4 +218,4 @@ send:
 
 ---
 
-For the full setup procedure see [`docs/SETUP.md`](SETUP.md); for the white-label structure see [`docs/WHITELABEL.md`](WHITELABEL.md).
+For the full setup procedure see [`docs/setup.md`](setup.md); for the white-label structure see [`docs/white-label.md`](white-label.md).

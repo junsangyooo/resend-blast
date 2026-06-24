@@ -15,7 +15,7 @@ email without writing HTML.
 - Image storage: pluggable — local disk (default), Azure Blob, or Cloudflare R2 (see "Images")
 - Auth: two modes via `brand.config.ts` `auth.mode` — **password** or **Google Workspace OAuth** — both issue an HS256 JWT session cookie
 - Tests: vitest (pure logic only — renderer, session)
-- Deploy: any Node host behind a reverse proxy (see `README` / `docs/SETUP.md`)
+- Deploy: any Node host behind a reverse proxy (see `README` / `docs/setup.md`)
 - **No database.** State is stored in files (see "Data storage").
 
 ## Directory structure
@@ -91,7 +91,7 @@ data/
 
 ## Environment variables / secrets
 **Secrets (keys) live in `.env.local`; brand (public identity) lives in `brand.config.ts`.**
-For white-label setup and details see `docs/WHITELABEL.md`.
+For white-label setup and details see `docs/white-label.md`.
 Never hardcode values into code or docs (reference names only).
 
 | Variable | Purpose |
@@ -114,7 +114,7 @@ Never hardcode values into code or docs (reference names only).
 
 ## Images
 Two independent axes, both configured in `brand.config.ts` `assets` (credentials stay in `.env.local`).
-See `docs/IMAGES.md` for the full pipeline.
+See `docs/images.md` for the full pipeline.
 
 - **`assets.provider`** — where uploaded images are stored:
   - `local` (default) — written to disk and served by the `/api/assets/[file]` route.
@@ -167,7 +167,7 @@ See `docs/IMAGES.md` for the full pipeline.
 - Any Node host behind a reverse proxy with automatic HTTPS works. The reverse proxy terminates TLS and
   proxies to the Next.js process (run via your process manager of choice).
 - `.env.local` is gitignored — provision it on the host separately. Secrets never live in version control.
-- For setup and production deployment steps see `docs/SETUP.md` and `docs/DEPLOY-READINESS.md`.
+- For setup and production deployment steps see `docs/setup.md` and `docs/production.md`.
 
 ## Development
 ```bash
@@ -185,7 +185,7 @@ npm run build  # production build
 - If `AUTH_SESSION_SECRET` is missing and `NODE_ENV=production`, throw immediately (no silent dev-key fallback).
 
 ## Reference docs
-- `docs/SETUP.md` — setup
-- `docs/IMAGES.md` — image pipeline (provider/delivery axes)
-- `docs/WHITELABEL.md` — white-label structure (brand.config)
-- `docs/DEPLOY-READINESS.md` — production & security notes
+- `docs/setup.md` — setup
+- `docs/images.md` — image pipeline (provider/delivery axes)
+- `docs/white-label.md` — white-label structure (brand.config)
+- `docs/production.md` — production & security notes

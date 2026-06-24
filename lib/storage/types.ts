@@ -3,7 +3,7 @@
  *
  * A storage backend (Azure Blob / S3 / R2 / local disk …) only needs to implement
  * this interface. Which backend to use is chosen by the single `assets.provider`
- * value in `brand.config.ts`. See docs/WHITELABEL.md for how to add a new backend.
+ * value in `brand.config.ts`. See docs/white-label.md for how to add a new backend.
  *
  * ⚠️ Adapters only receive "already validated" buffers. Image format validation
  *    (magic-bytes, allowed formats, size limit) is handled upfront by provider-agnostic

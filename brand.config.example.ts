@@ -14,7 +14,7 @@
  *  1) Replace the top "brand baseline values" and "design tokens" with your own → propagates across the whole app and emails
  *  2) Choose the login method with `auth.mode` (password = simple / google = Workspace)
  *  3) Fill in keys in `.env.local` (copy .env.local.example)
- *  Detailed steps and where to get credentials are in docs/SETUP.md; the white-label structure is in docs/WHITELABEL.md.
+ *  Detailed steps and where to get credentials are in docs/setup.md; the white-label structure is in docs/white-label.md.
  * ────────────────────────────────────────────────────────────────────────────
  */
 
