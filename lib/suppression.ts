@@ -1,9 +1,9 @@
 /**
- * 수신거부/반송/스팸신고 억제 목록.
- * 저장: data/suppression.json — { [emailLower]: { reason, at, source } }
- * 발송 dedupe 단계에서 여기에 있는 주소를 제외한다.
- * 출처: 사용자 수신거부(/api/unsubscribe), Resend webhook(bounced/complained).
- * Resend 도 리전 단위 자동 suppression 을 하지만, 우리 쪽 발송 단계에서 선제 제외 + 트래킹 표시를 위해 별도 유지.
+ * Unsubscribe/bounce/spam-complaint suppression list.
+ * Storage: data/suppression.json — { [emailLower]: { reason, at, source } }
+ * Excludes these addresses during the send dedupe step.
+ * Sources: user unsubscribe (/api/unsubscribe), Resend webhook (bounced/complained).
+ * Resend also does region-level auto-suppression, but we keep our own for proactive exclusion at send time + tracking display.
  */
 import fs from "fs/promises";
 import path from "path";
@@ -27,7 +27,7 @@ async function read(): Promise<Store> {
   return s && typeof s === "object" ? s : {};
 }
 
-/** 억제 목록에 추가(멱등). 이미 있으면 reason/at 유지(최초 기록 보존). */
+/** Add to the suppression list (idempotent). If already present, keep reason/at (preserve the first record). */
 export async function suppress(email: string, reason: SuppressionReason, source?: string): Promise<void> {
   const e = norm(email);
   if (!EMAIL_RE.test(e)) return;
@@ -41,7 +41,7 @@ export async function suppress(email: string, reason: SuppressionReason, source?
   });
 }
 
-/** 억제 해제(관리자/오등록 복구용). */
+/** Remove from suppression (for admin/mis-registration recovery). */
 export async function unsuppress(email: string): Promise<void> {
   const e = norm(email);
   await withFileLock(LOCK_KEY, async () => {
@@ -58,7 +58,7 @@ export async function isSuppressed(email: string): Promise<boolean> {
   return !!store[norm(email)];
 }
 
-/** 여러 이메일 중 억제된 것들의 Set 을 한 번에 반환(발송 dedupe 용). */
+/** Return, in one pass, the Set of suppressed addresses among the given emails (for send dedupe). */
 export async function suppressedSet(emails: string[]): Promise<Set<string>> {
   const store = await read();
   const out = new Set<string>();

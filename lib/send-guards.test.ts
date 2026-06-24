@@ -27,9 +27,9 @@ describe("globalThrottle", () => {
   it("spaces consecutive calls by at least the gap", async () => {
     const gap = 60;
     const start = Date.now();
-    await globalThrottle(gap); // 첫 슬롯은 보통 즉시
-    await globalThrottle(gap); // 두 번째는 gap 이후
+    await globalThrottle(gap); // first slot is usually immediate
+    await globalThrottle(gap); // second one comes after gap
     const elapsed = Date.now() - start;
-    expect(elapsed).toBeGreaterThanOrEqual(gap - 15); // 타이머 오차 허용
+    expect(elapsed).toBeGreaterThanOrEqual(gap - 15); // allow timer jitter
   });
 });

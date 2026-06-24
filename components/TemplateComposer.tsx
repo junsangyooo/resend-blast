@@ -9,15 +9,15 @@ import {
 } from "@/lib/blocks";
 import { brand } from "@/brand.config";
 
-/* ── tokens (brand.config.ts 의 email.colors 와 동기화) ── */
+/* ── tokens (synced with email.colors in brand.config.ts) ── */
 const C = brand.email.colors;
 const MONO = brand.email.mono;
-const CO = brand.identity.companyName; // 프리셋·푸터 표시용 회사명
+const CO = brand.identity.companyName; // company name for preset/footer display
 const BRAND_SW = [
   { k: "ink", v: C.ink, n: "먹색" }, { k: "body", v: C.body, n: "본문" },
   { k: "teal", v: C.teal, n: "브랜드" }, { k: "muted", v: C.muted, n: "옅은" },
 ];
-// 버튼 배경 색 토큰 (lib/blocks.ts BUTTON_COLORS 와 동일 키)
+// button background color tokens (same keys as BUTTON_COLORS in lib/blocks.ts)
 const BTN_SW = [
   { k: "mint", v: C.mint, n: "민트" },
   { k: "teal", v: C.teal, n: "틸" },
@@ -28,7 +28,7 @@ const TLAB: Record<BlockType, string> = {
   numbered: "번호 목록", agenda: "어젠다 표", grid: "그리드", image: "이미지", divider: "구분선",
 };
 const CARD_TYPES: [CardType, string][] = [["feature", "피처"], ["image", "이미지"], ["stat", "지표"], ["cta", "CTA"]];
-// 블록별 선택 구성요소
+// optional components per block
 const COMPOSE: Partial<Record<BlockType, [keyof Block, string][]>> = {
   heading: [["subnote", "아래 부제 코멘트"]],
   button: [["topNote", "위 코멘트"], ["bottomNote", "아래 코멘트"]],
@@ -91,14 +91,17 @@ function emptySpec(): TemplateSpec {
 }
 
 /* ── tree helpers ──
- * 스타일 결정(resolveStyle)·간격(GAP_PX)·버튼 색은 lib/blocks.ts(실제 렌더러)에서 import —
- * 캔버스와 발송 HTML 이 어긋나는 이중 구현을 금지한다. */
+ * Style resolution (resolveStyle), spacing (GAP_PX), and button colors are imported from
+ * lib/blocks.ts (the actual renderer) — to forbid a dual implementation where the canvas
+ * and the sent HTML diverge. */
 const SIZEPX = { S: { heading: 16, text: 13 }, M: { heading: 20, text: 14.5 }, L: { heading: 34, text: 15.5 } } as const;
 
-/* ── Editable: uncontrolled contentEditable (커서 유지) ──
- * 입력 중에도 ~400ms 디바운스로 state 에 커밋한다 — blur 없이 저장/미리보기를 눌러도
- * 마지막 편집이 유실되지 않게 (Safari 의 버튼 클릭 시 blur 미발생 케이스 방어).
- * focus 중에는 위 effect 가 DOM 을 건드리지 않으므로 캐럿·한글 IME 조합이 깨지지 않는다. */
+/* ── Editable: uncontrolled contentEditable (preserves caret) ──
+ * Commits to state on a ~400ms debounce even while typing — so the last edit isn't lost
+ * when save/preview is clicked without a blur (guards against Safari's case where a button
+ * click fires no blur).
+ * While focused, the effect above doesn't touch the DOM, so the caret and Korean IME
+ * composition don't break. */
 function Editable({ value, html, onCommit, onLive, ph, style, className, onSelect }: {
   value?: string; html?: string; onCommit: (v: string) => void; onLive?: (v: string) => void;
   ph?: string; style?: React.CSSProperties; className?: string; onSelect?: (el: HTMLElement) => void;
@@ -135,7 +138,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [spec, setSpec] = useState<TemplateSpec>(emptySpec);
-  const [started, setStarted] = useState(false); // 신규: 시작 화면(템플릿 선택) → true 면 편집기
+  const [started, setStarted] = useState(false); // new: start screen (template picker) → editor once true
   const [sel, setSel] = useState<string | null>(null);
   const [insMode, setInsMode] = useState<"block" | "mail">("mail");
   const [addAt, setAddAt] = useState<number | null>(null);
@@ -151,12 +154,12 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   const [undoBlk, setUndoBlk] = useState<{ block: Block; idx: number } | null>(null);
   const rtRef = useRef<HTMLDivElement>(null);
   const rtTargetId = useRef<string | null>(null);
-  // 저장/미리보기 직전 최신 spec 참조 (blur 직후 setState 가 클로저에 반영 안 되는 케이스 방어)
+  // latest spec reference right before save/preview (guards the case where setState right after blur isn't reflected in the closure)
   const specRef = useRef(spec);
   specRef.current = spec;
-  // 제목 autofill: 사용자가 제목을 직접 건드리기 전까지 이름→제목 연동
+  // subject autofill: link name→subject until the user edits the subject directly
   const subjectAuto = useRef(true);
-  const lastAutoSubject = useRef(""); // 직전 autofill 결과 — 이것과 다르면 사용자가 손댄 제목
+  const lastAutoSubject = useRef(""); // last autofill result — if it differs, the user edited the subject
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const optStash = useRef<Record<string, any>>({});
 
@@ -168,10 +171,10 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     fetch("/api/templates").then((r) => r.json()).then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name, archived: t.archived })))).catch(() => {});
     fetch("/api/logos").then((r) => r.json()).then((j) => setLogos(j.logos ?? [])).catch(() => {});
     if (editName) {
-      setStarted(true); // 기존 이메일 편집은 시작 화면 없이 바로 편집기로
-      subjectAuto.current = false; // 기존 이메일 편집 시 제목 연동 안 함
+      setStarted(true); // editing an existing email goes straight to the editor, skipping the start screen
+      subjectAuto.current = false; // don't link the subject when editing an existing email
       setName(editName);
-      let cancel = false; // 편집 대상을 빠르게 바꿀 때 늦게 도착한 응답이 현재 세션을 덮어쓰지 않게
+      let cancel = false; // when switching edit targets quickly, prevent a late-arriving response from overwriting the current session
       fetch(`/api/templates/spec?name=${encodeURIComponent(editName)}`).then((r) => r.json())
         .then((j) => { if (!cancel) { setSpec(j.spec ?? emptySpec()); setDescription(j.description ?? ""); } })
         .catch(() => { if (!cancel) { setSpec(emptySpec()); setDescription(""); } });
@@ -183,19 +186,19 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     optStash.current = {};
   }, [open, editName]);
 
-  /* 시작 화면 → 편집기 진입. 너비 선택을 승계하고 기본 로고는 RLWRLD 로 고정. */
+  /* start screen → enter editor. Inherit the width choice and default the logo to RLWRLD. */
   function defaultLogoSpec(): TemplateSpec["logo"] | undefined {
     const l = logos.find((x) => x.id === "rlwrld") ?? logos[0];
     return l ? { url: l.url, width: l.width, alt: l.label } : undefined;
   }
   function startWith(makeSpec: (() => TemplateSpec) | null) {
     const base = makeSpec ? makeSpec() : emptySpec();
-    if (makeSpec) subjectAuto.current = false; // 템플릿 제목 보호
+    if (makeSpec) subjectAuto.current = false; // protect the template subject
     setSpec({ ...base, width: spec.width, logo: defaultLogoSpec() });
     setStarted(true);
   }
 
-  /* 이름 슬러그 → 제목 자동 변환: "df-seoul-reminder" → "Df Seoul Reminder" */
+  /* name slug → subject auto-conversion: "df-seoul-reminder" → "Df Seoul Reminder" */
   function slugToTitle(slug: string): string {
     return slug
       .split(/[-_]+/)
@@ -207,8 +210,8 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     setName(v);
     if (!subjectAuto.current) return;
     setSpec((s) => {
-      // 사용자가 입력한 제목(프리셋 포함)은 절대 덮어쓰지 않는다 —
-      // 현재 제목이 비어있거나 직전 autofill 결과일 때만 연동.
+      // never overwrite a user-entered subject (including presets) —
+      // only link when the current subject is empty or equals the last autofill result.
       if (s.subject && s.subject !== lastAutoSubject.current) {
         subjectAuto.current = false;
         return s;
@@ -218,7 +221,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
       return { ...s, subject: t };
     });
   }
-  /* 제목을 직접 수정하면 이름 연동 해제 (MailInspector 경유). */
+  /* editing the subject directly unlinks the name binding (via MailInspector). */
   function setDocFromInspector<K extends keyof TemplateSpec>(k: K, v: TemplateSpec[K]) {
     if (k === "subject") subjectAuto.current = false;
     setDoc(k, v);
@@ -240,7 +243,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     setBlocks((b) => { const i = b.findIndex((x) => x.id === id), j = i + d; if (i < 0 || j < 0 || j >= b.length) return b; const c = [...b]; [c[i], c[j]] = [c[j], c[i]]; return c; });
   }
   function delBlock(id: string) {
-    // 실수 방지: 삭제 즉시 적용하되 5초간 실행취소 토스트 제공
+    // mistake prevention: apply deletion immediately but offer an undo toast for 5 seconds
     const idx = spec.blocks.findIndex((x) => x.id === id);
     const block = spec.blocks[idx];
     setBlocks((b) => b.filter((x) => x.id !== id));
@@ -258,8 +261,8 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }
   function setProp(f: keyof Block, v: any) { const b = selB(); if (!b) return; patchBlock(b.id, { [f]: (b as any)[f] === v ? "" : v } as any); }
-  // 숫자 캐스팅은 숫자 필드(cols/width)에만 — url 등 텍스트 필드에 "123" 입력 시 number 가 저장돼
-  // .trim() 검증이 무음 통과하던 버그 방지.
+  // numeric casting only on numeric fields (cols/width) — prevents the bug where typing "123"
+  // into a text field like url stored a number, letting .trim() validation pass silently.
   const NUMERIC_FIELDS = new Set<keyof Block>(["cols", "width"]);
   function setVal(f: keyof Block, v: any) {
     const b = selB(); if (!b) return;
@@ -272,9 +275,9 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     const next = { ...b } as any;
     const key = `${b.id}:${String(f)}`;
     if (cur === undefined) {
-      next[f] = optStash.current[key] ?? ""; // 다시 켜면 이전 입력 복원
+      next[f] = optStash.current[key] ?? ""; // restore previous input when toggled back on
     } else {
-      optStash.current[key] = cur; // 끌 때 값 보존
+      optStash.current[key] = cur; // preserve the value when toggling off
       delete next[f];
     }
     setBlocks((bs) => bs.map((x) => (x.id === b.id ? next : x)));
@@ -320,14 +323,15 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     document.execCommand(cmd, false, val);
     const id = rtTargetId.current; if (!id) return;
     const node = document.querySelector<HTMLElement>(`[data-bid="${id}"][data-rt="1"]`);
-    // state 에는 항상 sanitize 결과만 — blur 전에 저장해도 raw HTML 이 들어가지 않게.
+    // state always holds only the sanitized result — so raw HTML doesn't get in even if saved before blur.
     if (node) patchBlock(id, { html: sanitizeInline(node.innerHTML) });
   }
-  /* 인라인 링크: 선택이 살아있는 동안(버튼 mousedown preventDefault) 임시 href 앵커를 먼저 만들고,
-   * URL 은 state 레벨(블록 html 문자열 치환)로 확정한다 — 입력창 포커스 이동으로 selection/Range 가
-   * 무효화되어도 동작하고, sanitizeInline 정규화·DOM 재작성과도 충돌하지 않는다. */
+  /* inline link: while the selection is alive (button mousedown preventDefault), first create a
+   * temporary href anchor, then finalize the URL at the state level (block html string replacement) —
+   * this works even if the selection/Range is invalidated by focus moving to the input, and doesn't
+   * conflict with sanitizeInline normalization or DOM rewriting. */
   const PENDING_HREF = "https://pending-link.invalid/edit";
-  const [linkInput, setLinkInput] = useState<string | null>(null); // null = 닫힘
+  const [linkInput, setLinkInput] = useState<string | null>(null); // null = closed
   const pendingLinkBlock = useRef<string | null>(null);
   function unwrapPendingInHtml(html: string): string {
     return html.replace(/<a\s[^>]*href="https:\/\/pending-link\.invalid\/edit"[^>]*>([\s\S]*?)<\/a>/gi, "$1");
@@ -340,7 +344,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     setBlocks((bs) => bs.map((x) => (x.id === id && x.html !== undefined ? { ...x, html: unwrapPendingInHtml(x.html) } : x)));
   }
   function openLinkInput() {
-    // mousedown preventDefault 로 포커스가 캔버스에 남아 있는 동안 임시 앵커 생성 + 커밋
+    // create + commit a temporary anchor while focus stays on the canvas via mousedown preventDefault
     applyFmt("createLink", PENDING_HREF);
     pendingLinkBlock.current = rtTargetId.current;
     setLinkInput("https://");
@@ -371,7 +375,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* 편집 중 포커스를 강제로 blur 해 마지막 입력을 커밋시킨다 (저장/미리보기 직전). */
+  /* force-blur the focused element to commit the last input (right before save/preview). */
   async function flushEdits() {
     (document.activeElement as HTMLElement | null)?.blur?.();
     await new Promise((r) => setTimeout(r, 0));
@@ -448,7 +452,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
         {err && <div className="tcErr">{err}</div>}
 
         {!started ? (
-          /* ── 시작 화면: 폼 너비 + 템플릿(목표·미리보기) 선택 ── */
+          /* ── start screen: form width + template (goal·preview) selection ── */
           <div className="tcStart">
             <div className="tcStartTop">
               <div>
@@ -502,9 +506,9 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
             <div className="tcPGroup"><h3>템플릿</h3>
               {PRESETS.map((p) => (
                 <button key={p.id} className="tcPreset" onClick={() => {
-                  // 작성 중인 블록이 있으면 통째로 교체되므로 확인
+                  // if there are blocks being edited, they're replaced wholesale, so confirm
                   if (spec.blocks.length > 0 && !window.confirm("작성 중인 내용을 이 템플릿으로 교체할까요?")) return;
-                  subjectAuto.current = false; // 프리셋 제목 보호 — 이름 입력이 덮어쓰지 않게
+                  subjectAuto.current = false; // protect the preset subject — so name input doesn't overwrite it
                   setSpec(p.make()); setSel(null); setInsMode("mail"); setAddAt(null);
                 }}><b>{p.t}</b></button>
               ))}
@@ -608,7 +612,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
               onChange={(e) => setLinkInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") { e.preventDefault(); applyLink(); }
-                // ESC 는 링크 입력만 닫는다 — 컴포저 전체(useEscClose)로 전파 금지
+                // ESC closes only the link input — don't propagate to the whole composer (useEscClose)
                 if (e.key === "Escape") { e.stopPropagation(); cancelPendingLink(); }
               }}
               placeholder="https://… 또는 mailto:"
@@ -619,7 +623,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
         )}
       </div>
 
-      {/* 블록 삭제 실행취소 토스트 */}
+      {/* block deletion undo toast */}
       {undoBlk && (
         <div className="tcUndo">
           <span>{TLAB[undoBlk.block.type]} 블록 삭제됨</span>
@@ -658,7 +662,7 @@ function firstText(blocks: Block[]): string {
   return b ? (b.text || (b.html || "").replace(/<[^>]+>/g, "")) : "";
 }
 
-/* ── 시작 화면 템플릿 미리보기 — 실제 렌더러(renderTemplate)를 축소해 그대로 보여준다 ── */
+/* ── start screen template preview — shows the actual renderer (renderTemplate) scaled down as-is ── */
 function MiniPreview({ make, width }: { make: () => TemplateSpec; width?: TemplateSpec["width"] }) {
   const W = width === "wide" ? 680 : 600;
   const srcDoc = (() => {
@@ -678,9 +682,9 @@ function MiniPreview({ make, width }: { make: () => TemplateSpec; width?: Templa
 }
 
 /* ── Adder (inline + / dropzone) ──
- * 드래그 핸들러는 컨테이너에 둔다 — "여기에 놓기" 오버레이(::after)나 자식 위로 커서가 가도
- * dragLeave 가 발생하지 않아 깜박임·드롭 무효가 생기지 않는다.
- * (dragleave 는 자식으로 이동할 때도 발생하므로 relatedTarget 으로 진짜 이탈만 처리.) */
+ * Drag handlers live on the container — so even when the cursor moves over the "drop here"
+ * overlay (::after) or a child, no dragLeave fires, avoiding flicker and invalid drops.
+ * (dragleave also fires when moving to a child, so use relatedTarget to handle only real exits.) */
 function Adder({ idx, addAt, drag, setAddAt, addBlock }: { idx: number; addAt: number | null; drag: BlockType | null; setAddAt: (n: number | null) => void; addBlock: (t: BlockType, i: number) => void }) {
   const [over, setOver] = useState(false);
   return (
@@ -693,7 +697,7 @@ function Adder({ idx, addAt, drag, setAddAt, addBlock }: { idx: number; addAt: n
         if (!over) setOver(true);
       }}
       onDragLeave={(e) => {
-        if (e.currentTarget.contains(e.relatedTarget as Node)) return; // 자식/오버레이로의 이동은 이탈 아님
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return; // moving to a child/overlay isn't an exit
         setOver(false);
       }}
       onDrop={(e) => { e.preventDefault(); setOver(false); if (drag) addBlock(drag, idx); }}
@@ -704,7 +708,7 @@ function Adder({ idx, addAt, drag, setAddAt, addBlock }: { idx: number; addAt: n
           {BLOCK_PALETTE.map((p) => <button key={p.type} onClick={() => addBlock(p.type, idx)}><Icon n={p.type} /> {p.label}</button>)}
         </div>
       )}
-      {/* 드래그 중에만 활성화되는 확장 히트존 — 위아래 블록 가장자리까지 드롭 가능 영역을 넓힌다 */}
+      {/* expanded hit zone active only while dragging — widens the droppable area to the edges of the blocks above and below */}
       <div className="tcDropHit" />
     </div>
   );
@@ -931,7 +935,7 @@ function BlockInspector({ b, setProp, setVal, toggleOpt }: { b: Block | null; se
 function MailInspector({ spec, setDoc, setFooter, description, setDescription, logos, currentLogo, onLogo, onLogoUpload }: any) {
   const d: TemplateSpec = spec;
   return <div className="tcInsBody">
-    {/* ── 메일 설정 ── */}
+    {/* ── mail settings ── */}
     <div className="tcBigTitle" style={{ marginTop: 0 }}>메일 설정</div>
     <div className="tcFld"><label>이메일 제목 <span className="tcReq">*</span></label><input value={d.subject} onChange={(e) => setDoc("subject", e.target.value)} placeholder="[알림] 행사 D-1 안내" /></div>
     <div className="tcFld"><label>프리헤더 · 받은편지함 미리보기</label><input value={d.preheader ?? ""} onChange={(e) => setDoc("preheader", e.target.value)} placeholder="짧은 한 줄 요약" /></div>
@@ -944,7 +948,7 @@ function MailInspector({ spec, setDoc, setFooter, description, setDescription, l
       <p style={{ fontSize: 10, color: "#8b9196", margin: "6px 2px 0", lineHeight: 1.5 }}>600px = 이메일 표준. 680px = Gmail·Outlook에서 안전한 와이드 상한 (모바일은 자동 축소).</p>
     </div>
 
-    {/* ── 로고 설정 ── */}
+    {/* ── logo settings ── */}
     <div className="tcBigTitle">로고 설정</div>
     <div className="tcOptRow">로고 표시<label className="tcToggle"><input type="checkbox" checked={d.showLogo} onChange={(e) => setDoc("showLogo", e.target.checked)} /><span /></label></div>
     {d.showLogo && <div className="tcSubgroup">
@@ -953,7 +957,7 @@ function MailInspector({ spec, setDoc, setFooter, description, setDescription, l
       <div className="tcFld" style={{ marginTop: 10, marginBottom: 0 }}><label>로고 아래 문구 (선택)</label><input value={d.tagline ?? ""} onChange={(e) => setDoc("tagline", e.target.value)} placeholder="비우면 표시 안 함" /></div>
     </div>}
 
-    {/* ── 푸터 설정 ── */}
+    {/* ── footer settings ── */}
     <div className="tcBigTitle">푸터 설정</div>
     <div className="tcOptRow">푸터 표시<label className="tcToggle"><input type="checkbox" checked={d.showFooter} onChange={(e) => setDoc("showFooter", e.target.checked)} /><span /></label></div>
     {d.showFooter && <div className="tcSubgroup">
@@ -1056,11 +1060,11 @@ const CSS = `
 body.tcDragging .tcAdder{min-height:30px}
 .tcPlus{border:0;background:${C.teal};color:#fff;width:25px;height:25px;border-radius:50%;cursor:pointer;font-size:15px;line-height:1;opacity:0;transition:opacity .12s;z-index:3;box-shadow:0 2px 6px rgba(13,138,126,.4)}
 .tcAdder:hover .tcPlus{opacity:1}
-/* 드롭 히트존: 드래그 중에만 활성화 — 평소엔 클릭을 가로채지 않고,
-   드래그 중엔 위아래 블록 가장자리(±16px)까지 넉넉히 잡는다. */
+/* drop hit zone: active only while dragging — normally doesn't intercept clicks,
+   and while dragging it generously covers up to the edges of the blocks above and below (±16px). */
 .tcDropHit{display:none}
 body.tcDragging .tcDropHit{display:block;position:absolute;inset:-16px 0;z-index:1}
-/* 하이라이트 시 높이 고정(30px 유지) — 레이아웃 점프로 커서 아래 영역이 움직이며 깜박이는 것 방지 */
+/* fix height on highlight (keep 30px) — prevents the area under the cursor from shifting and flickering due to a layout jump */
 .tcAdder.dragover:after{content:"여기에 놓기";position:absolute;left:34px;right:34px;height:28px;border:2px dashed ${C.teal};border-radius:9px;background:#eaf6f4;color:${C.teal};font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;z-index:2;pointer-events:none}
 .tcAddMenu{position:absolute;top:30px;background:#fff;border:1px solid #ececef;border-radius:13px;box-shadow:0 14px 36px rgba(0,0,0,.17);padding:7px;z-index:20;display:grid;grid-template-columns:1fr 1fr;gap:4px;width:276px}
 .tcAddMenu button{display:flex;align-items:center;gap:8px;border:0;background:none;border-radius:8px;padding:8px 9px;cursor:pointer;font-size:12.5px;text-align:left;color:#333}

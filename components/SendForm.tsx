@@ -24,11 +24,11 @@ type SendEvent =
 export type SendPrefill = {
   template?: string;
   adhoc?: string;
-  /** 재발송 시 원본의 광고성 여부·발신자·회신주소를 승계 (컴플라이언스/일관성). */
+  /** On resend, inherit the original's ad flag, sender, and reply-to (compliance/consistency). */
   isAd?: boolean;
   from?: string;
   replyTo?: string;
-  /** 90초 멱등성 중복차단을 우회 (의도된 재발송). */
+  /** Bypass the 90-second idempotency dedupe block (intentional resend). */
   force?: boolean;
   nonce: number;
 } | null;
@@ -67,7 +67,7 @@ export default function SendForm({
   const [myNick, setMyNick] = useState("");
   const [replyTo, setReplyTo] = useState<string>("");
   const [isAd, setIsAd] = useState(false);
-  const [forceNextSend, setForceNextSend] = useState(false); // 재발송 prefill 시 멱등성 우회 1회
+  const [forceNextSend, setForceNextSend] = useState(false); // bypass idempotency once on resend prefill
   const [me, setMe] = useState<string>("");
   const [maxRecipients, setMaxRecipients] = useState<number>(1000);
 
@@ -85,7 +85,7 @@ export default function SendForm({
   useEffect(() => { loadTemplates(); }, [reloadKey]);
   useEffect(() => { loadConfig(); }, [configReloadKey]);
 
-  // 팔로업/재발송 등에서 넘어온 prefill 적용
+  // Apply prefill passed in from follow-up/resend, etc.
   useEffect(() => {
     if (!prefill) return;
     if (prefill.template) setSelected(prefill.template);
@@ -101,7 +101,7 @@ export default function SendForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.nonce]);
 
-  // 발송 중 페이지 이탈 경고
+  // Warn before leaving the page during a send
   useEffect(() => {
     if (!sending) return;
     const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
@@ -126,16 +126,16 @@ export default function SendForm({
     const opts: FromOption[] = j.fromOptions ?? [];
     setFromOptions(opts);
     setFromDefault(j.fromDefault ?? "");
-    // 현재 선택값이 여전히 유효하면 유지(관리자가 발신자를 추가/삭제해도 선택 보존), 아니면 기본값.
+    // Keep the current selection if still valid (preserved even when an admin adds/removes senders), otherwise use the default.
     setFrom((cur) => (cur && opts.some((o) => o.value === cur) ? cur : (j.fromDefault ?? "")));
     setMe(j.me ?? "");
     setMaxRecipients(j.maxRecipients ?? 1000);
     return opts;
   }
 
-  // 안전망: prefill(재발송 승계) 등으로 들어온 from 이 더 이상 사용 불가하면 교정.
-  // (서버가 미등록 발신자를 400 으로 거부하므로, 조용히 잘못 나가는 대신 여기서 미리 교정.)
-  // 본인 주소(표시 이름만 다른 경우)는 launch@ 가 아니라 내 personal 옵션으로 재매핑.
+  // Safety net: correct the `from` if one passed in via prefill (resend inheritance) etc. is no longer usable.
+  // (Since the server rejects unregistered senders with 400, fix it here in advance instead of silently sending wrong.)
+  // For your own address (differing only in display name), remap to your personal option rather than launch@.
   useEffect(() => {
     if (!from || fromOptions.length === 0) return;
     if (fromOptions.some((o) => o.value === from)) return;
@@ -145,14 +145,14 @@ export default function SendForm({
       : undefined;
     const next = myOption?.value || fromDefault || fromOptions[0]?.value || "";
     setFrom(next);
-    // 재발송 안내 등 기존 notice 를 덮어쓰지 않고 덧붙인다.
+    // Append rather than overwrite an existing notice (e.g. the resend guidance).
     const msg = myOption
       ? "원본 발신 이름을 사용할 수 없어 내 계정 발신자로 대체했습니다."
       : "선택했던 발신자를 사용할 수 없어 기본 발신자로 대체했습니다. 발송 전 발신자를 확인하세요.";
     setNotice((prev) => (prev ? `${prev} ⚠ ${msg}` : `⚠ ${msg}`));
   }, [from, fromOptions, fromDefault, me]);
 
-  // 본인 계정 발신 이름(닉네임) 저장 — personal 발신자로 등록되어 다음부터 유지.
+  // Save your own account's sender name (nickname) — registered as a personal sender and kept from then on.
   async function saveMyFromName() {
     const nick = myNick.trim();
     if (!nick || !me) return;
@@ -298,7 +298,7 @@ export default function SendForm({
     } finally {
       setSending(false);
       setAborting(false);
-      if (!testToSelf) setForceNextSend(false); // 멱등성 우회는 재발송 직후 1회만
+      if (!testToSelf) setForceNextSend(false); // idempotency bypass applies only once, right after a resend
     }
   }
 
@@ -416,7 +416,7 @@ export default function SendForm({
           <RecipientInput label="직접 입력 (이름 + 이메일)" value={adhoc} onTextChange={setAdhoc} onChange={setAdhocRows} />
         </section>
 
-        {/* ③ 발신 옵션 */}
+        {/* ③ Send options */}
         <section className="space-y-3">
           <StepHead n={3} title="발신 옵션" />
           <div>

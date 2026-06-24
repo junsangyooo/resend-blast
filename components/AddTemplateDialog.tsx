@@ -7,12 +7,12 @@ type ExistingTemplate = { name: string; archived: boolean };
 
 type Attachment = {
   id: string;
-  name: string;          // 원본 파일명 (src 매칭 키)
-  url: string | null;    // 업로드 완료 후 공개 URL
+  name: string;          // original filename (src matching key)
+  url: string | null;    // public URL after upload completes
   error?: string;
 };
 
-/** src 값이 이미 호스팅된(외부) 참조인지 — 치환 대상에서 제외. */
+/** Whether the src value is an already-hosted (external) reference — excluded from replacement. */
 function isRemoteSrc(v: string): boolean {
   return /^(https?:|data:|cid:|\/\/)/i.test(v.trim());
 }
@@ -23,7 +23,7 @@ function basenameOf(p: string): string {
   catch { return (parts[parts.length - 1] ?? "").toLowerCase(); }
 }
 
-/** 파일명 매칭으로 로컬 src 를 업로드된 공개 URL 로 치환. */
+/** Replace local src with the uploaded public URL by filename matching. */
 function replaceSrcs(html: string, atts: Attachment[]): string {
   return html.replace(/(src\s*=\s*)(["'])([^"']*)\2/gi, (m, pre: string, q: string, val: string) => {
     if (!val.trim() || isRemoteSrc(val)) return m;
@@ -33,7 +33,7 @@ function replaceSrcs(html: string, atts: Attachment[]): string {
   });
 }
 
-/** 아직 로컬 경로로 남은 src 개수 — 수신자 메일에서 깨질 이미지. */
+/** Count of src still left as local paths — images that will break in recipients' mail. */
 function localSrcCount(html: string): number {
   let n = 0;
   for (const m of html.matchAll(/src\s*=\s*(["'])([^"']*)\1/gi)) {
@@ -48,7 +48,7 @@ export default function AddTemplateDialog({
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
-  /** 편집 모드: 해당 이름의 raw body + meta 를 불러와 채운다. 신규 모드는 null. */
+  /** Edit mode: load and fill the raw body + meta for the given name. null for new mode. */
   editName?: string | null;
 }) {
   const [name, setName] = useState("");
@@ -62,13 +62,13 @@ export default function AddTemplateDialog({
   const [loading, setLoading] = useState(false);
   const [atts, setAtts] = useState<Attachment[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
-  // 비동기 업로드 완료 시점에 최신 첨부/본문을 참조하기 위한 미러
+  // mirror for referencing the latest attachments/body when async upload completes
   const attsRef = useRef<Attachment[]>([]);
   attsRef.current = atts;
   const bodyRef = useRef("");
   bodyRef.current = body;
 
-  // 신규 모드 — 중복 검사용 기존 이름 목록만 로드
+  // new mode — load only the existing name list for duplicate checking
   useEffect(() => {
     if (!open || editName) return;
     fetch("/api/templates")
@@ -77,7 +77,7 @@ export default function AddTemplateDialog({
       .catch(() => {});
   }, [open, editName]);
 
-  // 모드 전환 시 폼 초기화 / 편집 모드면 raw body + meta fetch
+  // reset form on mode switch / fetch raw body + meta in edit mode
   useEffect(() => {
     if (!open) return;
     setErr(""); setFileName(""); setAtts([]);
@@ -104,7 +104,7 @@ export default function AddTemplateDialog({
   if (!open) return null;
 
   const trimmed = name.trim();
-  // 편집 모드는 자기 자신 이름이라 중복 검사 스킵
+  // edit mode is its own name, so skip duplicate checking
   const dup = !editName && trimmed ? existing.find((t) => t.name === trimmed) : null;
   const nameInvalid = trimmed && !/^[A-Za-z0-9_-]+$/.test(trimmed);
   const nameError = nameInvalid
@@ -113,8 +113,8 @@ export default function AddTemplateDialog({
       ? `이미 같은 이름의 이메일이 있습니다${dup.archived ? " (보관함). 보관함에서 복원하거나 다른 이름을 사용하세요" : ". 다른 이름을 사용하세요"}`
       : "";
 
-  // .html 파일을 읽어 본문에 채운다. 전체 문서면 <body> 안쪽만 추출.
-  // 로드 직후 현재 첨부 목록으로 src 재치환 — 이미지를 먼저 올리고 HTML 을 나중에 올려도 동작.
+  // read a .html file and fill the body. If a full document, extract only inside <body>.
+  // re-replace src with the current attachment list right after loading — works even if images are uploaded first and HTML later.
   async function loadHtmlFile(file: File) {
     setErr("");
     try {
@@ -132,10 +132,10 @@ export default function AddTemplateDialog({
     }
   }
 
-  // 이미지 업로드 → 공개 URL 발급 → 본문 src 자동 치환.
+  // upload image → issue public URL → auto-replace body src.
   async function uploadImageFile(file: File) {
     const id = `${file.name}-${Math.random().toString(36).slice(2)}`;
-    // 동명 파일 재업로드 → 기존 항목 교체
+    // re-upload of a same-named file → replace the existing entry
     setAtts((cur) => [...cur.filter((a) => a.name.toLowerCase() !== file.name.toLowerCase()), { id, name: file.name, url: null }]);
     try {
       const fd = new FormData();
@@ -145,7 +145,7 @@ export default function AddTemplateDialog({
       if (!r.ok || !j.url) throw new Error(j.error ?? "업로드 실패");
       setAtts((cur) => {
         const next = cur.map((a) => (a.id === id ? { ...a, url: j.url as string } : a));
-        // 최신 첨부 목록으로 본문 즉시 재치환
+        // immediately re-replace the body with the latest attachment list
         setBody(replaceSrcs(bodyRef.current, next));
         return next;
       });
@@ -187,7 +187,7 @@ export default function AddTemplateDialog({
       if (!r.ok || !j.ok) throw new Error(j.error ?? "저장 실패");
       onSaved();
       onClose();
-      // 다음 open 시 useEffect 가 모드에 맞게 초기화하므로 여기서는 굳이 reset 안 함.
+      // useEffect resets per mode on next open, so no need to reset here.
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");
     } finally {
@@ -273,7 +273,7 @@ export default function AddTemplateDialog({
               placeholder='<table>...</table>'
             />
 
-            {/* 업로드된 이미지 첨부 칩 */}
+            {/* uploaded image attachment chips */}
             {atts.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {atts.map((a) => {

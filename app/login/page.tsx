@@ -20,7 +20,7 @@ export default function LoginPage() {
 }
 
 function safeNext(next: string): string {
-  // open-redirect 방지: 단일 슬래시로 시작하는 내부 경로만 허용.
+  // Prevent open redirects: only allow internal paths starting with a single slash.
   return next.startsWith("/") && !next.startsWith("//") ? next : "/";
 }
 
@@ -71,7 +71,7 @@ function PasswordForm({ next }: { next: string }) {
         body: JSON.stringify({ password }),
       });
       if (res.ok) {
-        // 세션 쿠키가 설정됐다. 의도한 경로로 이동.
+        // The session cookie has been set. Navigate to the intended path.
         router.replace(next);
         router.refresh();
         return;

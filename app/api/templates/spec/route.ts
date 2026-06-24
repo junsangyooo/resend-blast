@@ -4,7 +4,7 @@ import { getTemplateSpec, listTemplates } from "@/lib/templates";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 재편집용 spec + description 로드. 블록 조립기로 만든 템플릿만 spec 존재.
+// Load spec + description for re-editing. Only templates made with the block composer have a spec.
 export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name");
   if (!name) return NextResponse.json({ error: "name 없음" }, { status: 400 });

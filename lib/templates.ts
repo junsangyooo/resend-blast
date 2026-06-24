@@ -19,8 +19,8 @@ export type TemplateMeta = {
   subject: string;
   description: string;
   size: number;
-  composed: boolean; // 블록 조립기로 만들어 spec(json)이 있는지
-  archived: boolean; // 보관함으로 이동되어 메인 목록에서 숨김
+  composed: boolean; // whether it was built with the block composer and has a spec (json)
+  archived: boolean; // moved to the archive and hidden from the main list
   createdBy?: string;
   lastModifiedBy?: string;
   lastModifiedAt?: string;
@@ -44,8 +44,8 @@ async function readMeta(): Promise<MetaFile> {
   }
 }
 
-/** 덮어쓰기/삭제 권한 검증: 기존 생성자(createdBy)가 있고 본인/관리자가 아니면 거부.
- *  신규 이름이거나 레거시(생성자 미기록)는 허용. */
+/** Verify overwrite/delete permission: reject if an existing creator (createdBy) exists and the actor isn't them/an admin.
+ *  Allowed for new names or legacy entries (no recorded creator). */
 async function assertCanManageTemplate(name: string, actorEmail?: string): Promise<void> {
   const meta = await readMeta();
   const owner = meta[name]?.createdBy;
@@ -54,7 +54,7 @@ async function assertCanManageTemplate(name: string, actorEmail?: string): Promi
   }
 }
 
-/** _meta.json 의 read-modify-write 를 직렬화 + atomic write 로 동시 쓰기 충돌 방지. */
+/** Serialize the read-modify-write of _meta.json + atomic write to prevent concurrent-write collisions. */
 async function mutateMeta(fn: (m: MetaFile) => MetaFile | Promise<MetaFile>): Promise<void> {
   return withFileLock(META_LOCK_KEY, async () => {
     const cur = await readMeta();
@@ -117,13 +117,13 @@ export async function buildFullHtml(name: string): Promise<{ subject: string; ht
   return { subject, html: wrapHtml(subject, body) };
 }
 
-/** spec(JSON)을 저장 안 하고 즉시 풀 HTML로 렌더 (미리보기용). 레거시 spec 은 트리로 마이그레이션. */
+/** Render a spec (JSON) straight to full HTML without saving (for preview). Legacy specs are migrated to the tree. */
 export function buildFullHtmlFromSpec(spec: TemplateSpec): { subject: string; html: string } {
   const subject = spec.subject?.trim() || DEFAULT_SUBJECT;
   return { subject, html: wrapHtml(subject, renderTemplate(migrateSpec(spec))) };
 }
 
-/** 블록 조립기 spec 로드 (재편집용). 없으면 null. 레거시 spec 은 트리 모델로 변환해 반환. */
+/** Load the block-composer spec (for re-editing). null if none. Legacy specs are converted to the tree model and returned. */
 export async function getTemplateSpec(name: string): Promise<TemplateSpec | null> {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) return null;
   try {
@@ -134,7 +134,7 @@ export async function getTemplateSpec(name: string): Promise<TemplateSpec | null
   }
 }
 
-/** 동명 이메일(템플릿) 존재 여부 — 메타 또는 파일 기준. */
+/** Whether an email (template) of the same name exists — based on meta or file. */
 export async function templateExists(name: string): Promise<boolean> {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) return false;
   const meta = await readMeta();
@@ -142,7 +142,7 @@ export async function templateExists(name: string): Promise<boolean> {
   try { await fs.access(path.join(TEMPLATES_DIR, `${name}.html`)); return true; } catch { return false; }
 }
 
-/** 신규 저장 시 동명 무경고 덮어쓰기 방지. 편집 모드(overwrite=true)는 통과. */
+/** Prevent silent same-name overwrite on new save. Edit mode (overwrite=true) passes through. */
 async function assertNotDuplicate(name: string, overwrite: boolean): Promise<void> {
   if (overwrite) return;
   if (await templateExists(name)) {
@@ -150,7 +150,7 @@ async function assertNotDuplicate(name: string, overwrite: boolean): Promise<voi
   }
 }
 
-/** 블록 조립기 결과 저장: {name}.json(spec) + {name}.html(렌더) + _meta.json(제목/설명+감사). */
+/** Save block-composer output: {name}.json(spec) + {name}.html(render) + _meta.json(subject/description+audit). */
 export async function saveComposedTemplate(
   name: string,
   spec: TemplateSpec,
@@ -171,7 +171,7 @@ export async function saveComposedTemplate(
   await assertNotDuplicate(name, !!opts.overwrite);
   await assertCanManageTemplate(name, actorEmail);
 
-  const mspec = migrateSpec(spec); // 트리 모델로 정규화 후 저장
+  const mspec = migrateSpec(spec); // normalize to the tree model before saving
   const body = renderTemplate(mspec);
   await atomicWrite(path.join(TEMPLATES_DIR, `${name}.html`), body);
   await atomicWrite(path.join(TEMPLATES_DIR, `${name}.json`), JSON.stringify(mspec, null, 2));
@@ -181,7 +181,7 @@ export async function saveComposedTemplate(
       ...prev,
       subject: spec.subject.trim(),
       description: description.trim(),
-      // 새로 저장(또는 덮어쓰기) 시 항상 활성화 — 보관 상태 잔재가 새 템플릿을 숨기는 버그 방지
+      // Always activate on (re)save — prevents a leftover archived flag from hiding the new template
       archived: false,
       createdBy: prev.createdBy ?? actorEmail,
       lastModifiedBy: actorEmail ?? prev.lastModifiedBy,
@@ -212,7 +212,7 @@ export async function saveTemplate(
       ...prev,
       subject: subject.trim() || DEFAULT_SUBJECT,
       description: description.trim(),
-      // 새로 저장(또는 덮어쓰기) 시 항상 활성화 — 보관 상태 잔재가 새 템플릿을 숨기는 버그 방지
+      // Always activate on (re)save — prevents a leftover archived flag from hiding the new template
       archived: false,
       createdBy: prev.createdBy ?? actorEmail,
       lastModifiedBy: actorEmail ?? prev.lastModifiedBy,
@@ -222,8 +222,8 @@ export async function saveTemplate(
   });
 }
 
-/** 보관함 토글: _meta.json 의 archived 플래그만 변경(파일은 유지).
- *  보관/복원은 가역적이라 누구나 가능(영구 삭제만 생성자/관리자로 제한). */
+/** Archive toggle: only flips the archived flag in _meta.json (files are kept).
+ *  Archive/restore is reversible so anyone can do it (only permanent delete is restricted to creator/admin). */
 export async function setArchived(name: string, archived: boolean, actorEmail?: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
   await mutateMeta((m) => {
@@ -237,7 +237,7 @@ export async function setArchived(name: string, archived: boolean, actorEmail?: 
   });
 }
 
-/** 영구 삭제: {name}.html + {name}.json + _meta 항목 제거. 되돌릴 수 없음. 생성자/관리자만. */
+/** Permanent delete: removes {name}.html + {name}.json + the _meta entry. Irreversible. Creator/admin only. */
 export async function deleteTemplate(name: string, actorEmail?: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
   await assertCanManageTemplate(name, actorEmail);

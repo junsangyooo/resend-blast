@@ -4,9 +4,9 @@ import { previewFill } from "@/lib/blocks";
 import { requireUserEmail } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
-  // 발송 확인 모달용: 개인화 토큰을 보존한 풀 HTML(JSON). 클라이언트가 수신자별로 직접 치환해
-  // 네트워크 왕복 없이 미리보기를 전환한다. (raw HTML 은 이미 /api/templates/body 로도 노출돼
-  // 있어 보안 표면 증가 없음.)
+  // For the send-confirmation modal: full HTML (JSON) with personalization tokens preserved. The client substitutes
+  // per recipient itself to switch previews without a network round-trip. (Raw HTML is already exposed via
+  // /api/templates/body too, so there's no increase in attack surface.)
   const builtName = req.nextUrl.searchParams.get("built");
   if (builtName) {
     const built = await buildFullHtml(builtName);
@@ -17,10 +17,10 @@ export async function GET(req: NextRequest) {
   if (preview) {
     const built = await buildFullHtml(preview);
     if (!built) return NextResponse.json({ error: "not found" }, { status: 404 });
-    // 저장형 HTML 을 서빙 — sandbox 지시자는 빼서 새 탭에서 링크(target=_blank)가 열리고
-    // 외부/same-origin 스크립트(예: 메일 클라이언트 측 이메일 디코딩)가 동작하도록 한다.
-    // inline <script> 는 계속 차단('unsafe-inline' 미부여)하여 저장형 XSS 방어선은 유지.
-    // 미리보기는 개인화 토큰을 샘플값으로 치환.
+    // Serve the stored HTML — omit the sandbox directive so links (target=_blank) open in a new tab
+    // and external/same-origin scripts (e.g. mail-client-side email decoding) work.
+    // inline <script> remains blocked (no 'unsafe-inline' granted), keeping the stored-XSS defense line.
+    // The preview substitutes personalization tokens with sample values.
     return new NextResponse(previewFill(built.html), {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 보관함 토글
+// Archive toggle
 export async function PATCH(req: NextRequest) {
   try {
     const actor = await requireUserEmail();
@@ -60,7 +60,7 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
-// 영구 삭제 (보관함에서만 호출)
+// Permanent delete (called only from the archive)
 export async function DELETE(req: NextRequest) {
   try {
     const actor = await requireUserEmail();

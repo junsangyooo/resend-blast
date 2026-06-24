@@ -1,10 +1,10 @@
 /**
- * 세션 토큰 = HS256 JWT. Web Crypto만 사용 → Edge 미들웨어 + Node 라우트 모두 동작.
- * 외부 라이브러리 없음.
+ * Session token = HS256 JWT. Uses Web Crypto only → works in both Edge middleware and Node routes.
+ * No external libraries.
  */
 
 export const SESSION_COOKIE = "blast_session";
-export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7일
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 type Payload = { email: string; iat: number; exp: number };
 
@@ -38,7 +38,7 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
 function secret(): string {
   const s = process.env.AUTH_SESSION_SECRET || process.env.JWT_SECRET;
   if (s) return s;
-  // 프로덕션에서 키 누락은 silent fallback 금지 — 토큰 위조를 막기 위해 fail-fast.
+  // No silent fallback if the key is missing in production — fail-fast to prevent token forgery.
   if (process.env.NODE_ENV === "production") {
     throw new Error("AUTH_SESSION_SECRET (또는 JWT_SECRET) 환경변수가 필요합니다");
   }
@@ -56,14 +56,14 @@ export async function createSession(email: string): Promise<string> {
   return `${data}.${b64urlEncode(new Uint8Array(sig))}`;
 }
 
-/** 유효하면 payload, 아니면 null. (서명·만료 검증) */
+/** payload if valid, else null. (Verifies signature and expiry) */
 export async function verifySession(token: string | undefined | null): Promise<Payload | null> {
   if (!token) return null;
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [header, body, sig] = parts;
   try {
-    // 알고리즘 혼동(alg:none / RS256 confusion) 방어: HS256 만 수용.
+    // Defend against algorithm confusion (alg:none / RS256 confusion): accept only HS256.
     const hdr = JSON.parse(b64urlDecodeStr(header)) as { alg?: string; typ?: string };
     if (hdr.alg !== "HS256") return null;
     const key = await hmacKey(secret());

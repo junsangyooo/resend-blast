@@ -1,15 +1,15 @@
 /**
- * 자산 스토리지 진입점 — 공개 API.
+ * Asset storage entry point — public API.
  *
- * 호출부(app/api/upload, app/api/logos)는 이 모듈만 import 한다.
- * 어느 스토리지 백엔드를 쓸지는 `brand.config.ts`의 `assets.provider` 한 값으로 정해진다.
+ * Callers (app/api/upload, app/api/logos) import only this module.
+ * Which storage backend to use is determined by the single `assets.provider` value in `brand.config.ts`.
  *
- * ── 새 스토리지 추가하기 ──────────────────────────────────────────────────
- *   1) lib/storage/adapters/<name>.ts 에 StorageAdapter 구현 1개 작성
- *   2) 아래 ADAPTERS 에 한 줄 등록
- *   3) brand.config.ts 의 assets.provider 를 "<name>" 으로 변경
- *   4) .env.local 에 해당 스토리지 키 추가
- *   → 코드 본문(호출부)은 건드리지 않는다.
+ * ── Adding a new storage backend ──────────────────────────────────────────
+ *   1) Write one StorageAdapter implementation in lib/storage/adapters/<name>.ts
+ *   2) Register one line in ADAPTERS below
+ *   3) Change assets.provider in brand.config.ts to "<name>"
+ *   4) Add that storage's keys to .env.local
+ *   → Don't touch the code body (callers).
  */
 import { brand } from "../../brand.config";
 import type { StorageAdapter } from "./types";
@@ -21,9 +21,9 @@ import {
   isAllowedImageType,
 } from "./image-validation";
 
-// ── 어댑터 레지스트리 ★새 스토리지는 여기에 한 줄 추가 ──
+// ── Adapter registry ★add a new storage backend here in one line ──
 const ADAPTERS: Record<string, () => StorageAdapter> = {
-  local: () => new LocalAdapter(), // 외부 계정 0개 (기본) — 디스크 저장 + 앱이 서빙
+  local: () => new LocalAdapter(), // zero external accounts (default) — disk storage + app serves it
   azure: () => new AzureAdapter(),
 };
 
@@ -41,9 +41,9 @@ function getAdapter(): StorageAdapter {
 }
 
 /**
- * 이미지 버퍼를 검증한 뒤 선택된 스토리지에 올리고 공개 URL을 반환.
- * content-type은 magic bytes로 판별된 실제 타입을 사용 (클라이언트 신고값 무시).
- * 시그니처는 기존 lib/azure.ts 의 uploadImage 와 동일 — 호출부 무손상.
+ * Validate the image buffer, then upload to the selected storage and return the public URL.
+ * Uses the real type detected from magic bytes for content-type (ignores the client-reported value).
+ * Signature matches the previous lib/azure.ts uploadImage — callers unaffected.
  */
 export async function uploadImage(data: Buffer, claimedType: string): Promise<string> {
   if (!isAllowedImageType(claimedType)) {
@@ -53,11 +53,11 @@ export async function uploadImage(data: Buffer, claimedType: string): Promise<st
   if (!realType) {
     throw new Error("파일이 PNG/JPG/GIF/WEBP 형식이 아닙니다 (헤더 검증 실패)");
   }
-  // 신고한 타입과 실제 타입이 어긋나면 실제 타입을 사용 (jpg/jpeg 동일시)
+  // If the claimed type and the real type disagree, use the real type (jpg/jpeg treated the same)
   const ext = EXT_BY_TYPE[realType];
   return getAdapter().put(data, realType, ext);
 }
 
-// 검증 유틸은 호출부(라우트)가 사전 차단용으로 그대로 쓰므로 재노출.
+// Re-exported because callers (routes) use these validation utils as a pre-block.
 export { isAllowedImageType, MAX_UPLOAD_BYTES } from "./image-validation";
 export type { StorageAdapter } from "./types";

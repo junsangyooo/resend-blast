@@ -1,6 +1,6 @@
 /**
- * Google OAuth 2.0 Authorization Code flow 헬퍼. 라이브러리 없이 fetch만 사용.
- * 도메인 제한(@ALLOWED_DOMAIN)을 강제한다.
+ * Google OAuth 2.0 Authorization Code flow helpers. Uses fetch only, no libraries.
+ * Enforces the domain restriction (@ALLOWED_DOMAIN).
  */
 
 import { brand } from "../brand.config";
@@ -14,7 +14,7 @@ export function allowedDomain(): string {
   return brand.auth.loginDomain;
 }
 
-/** 허용된 공개 호스트(스푸핑된 Host/X-Forwarded-Host 로 오픈리다이렉트 방지). */
+/** Allowed public hosts (prevents open redirects via spoofed Host/X-Forwarded-Host). */
 function allowedHosts(): Set<string> {
   const hosts = new Set<string>(["localhost:3001", "127.0.0.1:3001"]);
   try { hosts.add(new URL(brand.identity.appBaseUrl).host); } catch {}
@@ -22,10 +22,10 @@ function allowedHosts(): Set<string> {
 }
 
 /**
- * 요청의 실제 공개 origin. Caddy 등 리버스 프록시 뒤에서도 정확하도록
- * X-Forwarded-Proto / X-Forwarded-Host 를 우선 사용하되, 호스트는 화이트리스트로 검증한다.
- * 스푸핑된 호스트면 신뢰하지 않고 설정된 appBaseUrl 로 폴백(피싱 리다이렉트 차단).
- * (로컬: 헤더 없음 → host=localhost:3001, proto=http)
+ * The request's actual public origin. To stay correct behind a reverse proxy (e.g., Caddy),
+ * prefer X-Forwarded-Proto / X-Forwarded-Host, but validate the host against a whitelist.
+ * If the host is spoofed, don't trust it and fall back to the configured appBaseUrl (blocks phishing redirects).
+ * (Local: no headers → host=localhost:3001, proto=http)
  */
 export function originFromRequest(req: {
   headers: Headers;
@@ -37,7 +37,7 @@ export function originFromRequest(req: {
   return brand.identity.appBaseUrl.replace(/\/+$/, "");
 }
 
-/** 구글 인증 화면 URL. state(nonce) 포함. */
+/** Google consent screen URL. Includes state (nonce). */
 export function buildAuthUrl(redirectUri: string, state: string): string {
   const p = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID ?? "",
@@ -46,7 +46,7 @@ export function buildAuthUrl(redirectUri: string, state: string): string {
     scope: "openid email profile",
     access_type: "online",
     prompt: "select_account",
-    hd: allowedDomain(), // 회사 도메인 힌트
+    hd: allowedDomain(), // company domain hint
     state,
   });
   return `${AUTH_ENDPOINT}?${p.toString()}`;
@@ -54,7 +54,7 @@ export function buildAuthUrl(redirectUri: string, state: string): string {
 
 type IdInfo = { email?: string; email_verified?: boolean | string; hd?: string };
 
-/** code → id_token 교환 후 이메일 정보 파싱. */
+/** Exchange code → id_token, then parse email info. */
 export async function exchangeCode(code: string, redirectUri: string): Promise<IdInfo> {
   const body = new URLSearchParams({
     code,
@@ -77,7 +77,7 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<I
   return decodeIdToken(j.id_token);
 }
 
-/** id_token은 구글 토큰 엔드포인트에서 TLS로 직접 받았으므로 payload 디코드만 해도 안전. */
+/** The id_token came directly from Google's token endpoint over TLS, so decoding the payload alone is safe. */
 function decodeIdToken(idToken: string): IdInfo {
   const payload = idToken.split(".")[1];
   if (!payload) throw new Error("잘못된 id_token");
@@ -86,8 +86,8 @@ function decodeIdToken(idToken: string): IdInfo {
   return JSON.parse(Buffer.from(b64, "base64").toString("utf-8"));
 }
 
-/** 회사 도메인 검증. 통과하면 정규화된 email 반환, 아니면 null.
- * Workspace 외부에서 만든 @rlwrld.ai 이메일을 차단하려면 hd 클레임 필수 (AND 조건). */
+/** Company domain check. Returns the normalized email if it passes, else null.
+ * The hd claim is required to block @rlwrld.ai emails created outside Workspace (AND condition). */
 export function verifyDomain(info: IdInfo): string | null {
   const email = (info.email ?? "").toLowerCase().trim();
   const verified = info.email_verified === true || info.email_verified === "true";

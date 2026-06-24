@@ -12,8 +12,8 @@ type ListSummary = {
 };
 
 /**
- * 리스트 다중 선택 UI. SendForm 안에서 사용.
- * 선택한 슬러그 배열만 부모에게 전달. dedupe은 서버에서.
+ * List multi-select UI. Used inside SendForm.
+ * Passes only the selected slug array to the parent. Dedupe happens on the server.
  */
 export default function ListPicker({
   selected,
@@ -26,7 +26,7 @@ export default function ListPicker({
   onChange: (slugs: string[]) => void;
   reloadKey: number;
   onManage: () => void;
-  /** 인라인 빠른 리스트 생성 (관리 모달 안 거침). */
+  /** Inline quick list creation (without going through the management modal). */
   onQuickAdd: () => void;
 }) {
   const [lists, setLists] = useState<ListSummary[]>([]);

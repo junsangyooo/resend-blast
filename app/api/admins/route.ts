@@ -5,7 +5,7 @@ import { requireUserEmail } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 관리자 레지스트리 — 조회·추가·삭제 모두 관리자만. env 시드는 삭제 불가. */
+/** Admin registry — list/add/remove all admin-only. env seeds cannot be removed. */
 export async function GET() {
   try {
     const email = await requireUserEmail();

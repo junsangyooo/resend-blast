@@ -15,8 +15,8 @@ type ListSummary = {
 };
 
 /**
- * 리스트 목록 화면 — 검색 · 카드 · 생성/편집 진입.
- * 실제 생성/편집/삭제 UI 는 ListEditor 가 담당(SendForm 인라인 추가와 공용).
+ * List index screen — search, cards, create/edit entry points.
+ * The actual create/edit/delete UI is handled by ListEditor (shared with SendForm inline add).
  */
 export default function ListManager({
   open,

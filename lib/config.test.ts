@@ -3,7 +3,7 @@ import { isFromAllowed, resolveReplyTo, isAdmin } from "./config";
 import { canManageAsync, isAdminAsync } from "./admins";
 import { brand } from "../brand.config";
 
-const D = brand.auth.senderDomain; // 발신 허용 도메인 (brand.config.ts)
+const D = brand.auth.senderDomain; // allowed sender domain (brand.config.ts)
 const orig = process.env.ADMIN_EMAILS;
 afterEach(() => { process.env.ADMIN_EMAILS = orig; });
 

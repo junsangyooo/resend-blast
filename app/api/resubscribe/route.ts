@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 재구독 (공개 — 미들웨어 bypass, 토큰 서명 검증). 수신거부 확인 메일의 "다시 구독하기" 버튼이 향한다.
- * - GET  : 확인 페이지(POST 버튼). GET 자체로는 해제하지 않음.
- * - POST : 억제목록에서 제거.
- * 재구독 후엔 추가 메일을 보내지 않는다(메일 루프 방지).
+ * Resubscribe (public — bypasses middleware, token signature verified). The "Resubscribe" button in the unsubscribe confirmation email points here.
+ * - GET  : confirmation page (POST button). GET alone does not unsuppress.
+ * - POST : removes from the suppression list.
+ * No further email is sent after resubscribing (prevents mail loops).
  */
 function esc(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");

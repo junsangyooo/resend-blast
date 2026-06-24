@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /** body: { members: [{email, name?}], mode: "merge"|"replace" }
- *  실제 파일 파싱은 클라이언트에서 (lib/import-parser.ts) → 정제된 멤버 배열만 전송.
- *  소유자/관리자만 가능(라우트 레벨 인증 — 심층 방어). */
+ *  Actual file parsing happens on the client (lib/import-parser.ts) → only the cleaned member array is sent.
+ *  Owner/admin only (route-level auth — defense in depth). */
 export async function POST(req: NextRequest, { params }: { params: { slug: string } }) {
   try {
     const actor = await requireUserEmail();

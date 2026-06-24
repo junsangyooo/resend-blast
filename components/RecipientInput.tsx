@@ -17,7 +17,7 @@ const ROLE_LABELS: { value: ColumnRole; label: string }[] = [
 
 function downloadSampleCsv() {
   const csv = "Email,Name\nhong@example.com,홍길동\njane@example.com,Jane Doe\n";
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM: 엑셀 한글 호환
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM: Excel Korean compatibility
   const u = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = u;
@@ -26,7 +26,7 @@ function downloadSampleCsv() {
   URL.revokeObjectURL(u);
 }
 
-/* ── 지원 형식 인포 팝업 — 엑셀처럼 보이는 그리드로 허용 형식을 그대로 보여준다 ── */
+/* ── Supported-format info popup — shows the accepted formats as-is in an Excel-like grid ── */
 type SheetRow = { cells: string[]; head?: boolean; caption?: string };
 const SHEET_EXAMPLES: SheetRow[] = [
   { caption: "기본 — Email + Name", cells: [] },
@@ -61,7 +61,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* ① 파일 업로드 — 엑셀 그리드 미리보기 */}
+          {/* ① File upload — Excel grid preview */}
           <section>
             <div className="text-[12px] font-bold mb-2">📁 CSV / Excel 업로드 — 이런 시트가 모두 인식됩니다</div>
             <div className="rounded-lg border border-border overflow-hidden">
@@ -102,7 +102,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1.5 text-[10.5px] text-muted">업로드 후 컬럼 매핑을 직접 확인·수정할 수 있어요. 시트가 여러 개면 선택 가능.</p>
           </section>
 
-          {/* ② 직접 입력 — 입력란과 같은 모습으로 */}
+          {/* ② Direct entry — same look as the input field */}
           <section>
             <div className="text-[12px] font-bold mb-2">⌨ 직접 입력 — 한 줄에 한 명, 아래처럼 그대로 치면 됩니다</div>
             <div className="input font-mono text-[12px] whitespace-pre leading-relaxed text-text/80 pointer-events-none select-text">
@@ -111,7 +111,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1.5 text-[10.5px] text-muted">엑셀·구글시트·노션 표에서 복사해 그대로 붙여넣어도 됩니다.</p>
           </section>
 
-          {/* ③ 개인화 */}
+          {/* ③ Personalization */}
           <section className="rounded-lg border border-border bg-surface2/30 px-3 py-2.5">
             <div className="text-[11px] text-text/80 leading-relaxed">
               <strong>개인화</strong> — 이름이 매핑된 수신자는 본문·제목의{" "}
@@ -132,12 +132,12 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * 수신자 입력 공용 컴포넌트.
- * 탭/파이프/쉼표/「이름 <이메일>」 어떤 형식이든 parseRecipientGrid 로 이름+이메일을 매핑하고
- * 인식/무시 칩(토글)으로 결과를 펼쳐볼 수 있다. CSV/Excel 업로드는 컬럼 매핑 확인 단계를 거쳐 합류.
+ * Shared recipient-input component.
+ * Maps name+email from any format (tab/pipe/comma/「Name <email>」) via parseRecipientGrid,
+ * and the recognized/ignored chips (toggle) let you expand the result. CSV/Excel uploads join in after a column-mapping confirmation step.
  *
- * - onAdd 제공 → accumulate 모드: "추가" 버튼 노출, 클릭 시 rows 전달 후 입력 비움.
- * - onAdd 없음 → live 모드: 입력이 바뀔 때마다 onChange(rows) 호출.
+ * - onAdd provided → accumulate mode: shows an "add" button; on click, passes rows then clears the input.
+ * - onAdd absent → live mode: calls onChange(rows) every time the input changes.
  */
 export default function RecipientInput({
   onAdd,
@@ -151,12 +151,12 @@ export default function RecipientInput({
 }: {
   onAdd?: (rows: Recipient[]) => void;
   onChange?: (rows: Recipient[]) => void;
-  /** controlled 텍스트(부모가 발송 payload 로 보관). 없으면 내부 상태 사용. */
+  /** Controlled text (parent keeps it as the send payload). Falls back to internal state if absent. */
   value?: string;
   onTextChange?: (text: string) => void;
   placeholder?: string;
   showImport?: boolean;
-  /** 라벨 텍스트 — 주면 [라벨 ····· 업로드/인포] 헤더 행을 함께 렌더. */
+  /** Label text — if given, also renders the [label ····· upload/info] header row. */
   label?: string;
   className?: string;
 }) {
@@ -171,24 +171,24 @@ export default function RecipientInput({
   const [importing, setImporting] = useState(false);
   const [importErr, setImportErr] = useState("");
   const [infoOpen, setInfoOpen] = useState(false);
-  const [resultOpen, setResultOpen] = useState(false); // 인식/무시 펼침 패널
+  const [resultOpen, setResultOpen] = useState(false); // recognized/ignored expand panel
   const fileRef = useRef<HTMLInputElement>(null);
   const accumulate = typeof onAdd === "function";
 
-  // CSV/XLSX 업로드 → 컬럼 매핑 확인 단계
+  // CSV/XLSX upload → column-mapping confirmation step
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<ImportAnalysis | null>(null);
   const [roles, setRoles] = useState<ColumnRole[]>([]);
-  const [headerOverride, setHeaderOverride] = useState<boolean | null>(null); // null = 자동 추론 따름
+  const [headerOverride, setHeaderOverride] = useState<boolean | null>(null); // null = follow auto-inference
   const [buildFns, setBuildFns] = useState<null | typeof import("@/lib/import-parser")>(null);
 
-  // 펼침 패널 내 이름 인라인 편집
+  // Inline name editing within the expand panel
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
   const parsed = useMemo(() => parseRecipientGrid(text), [text]);
 
-  // 파싱 결과를 부모에 즉시 반영 (live·accumulate 공통).
+  // Reflect parse results to the parent immediately (common to live and accumulate).
   useEffect(() => {
     onChange?.(parsed.rows);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,7 +198,7 @@ export default function RecipientInput({
     setImportErr("");
     setImporting(true);
     try {
-      // xlsx 라이브러리는 무거우므로 임포트 시점에만 로드.
+      // The xlsx library is heavy, so load it only at import time.
       const mod = await import("@/lib/import-parser");
       const a = await mod.analyzeImportFile(file, sheetName);
       if (a.grid.length === 0) {
@@ -217,7 +217,7 @@ export default function RecipientInput({
     }
   }
 
-  // 매핑 확인 패널의 실시간 결과 — 헤더 여부는 사용자가 교정 가능 (자동 추론 오판 복구)
+  // Live result of the mapping confirmation panel — the user can correct whether a header exists (recovers from auto-inference mistakes)
   const effectiveHeader = headerOverride ?? analysis?.hasHeader ?? false;
   const pendingReport = useMemo(() => {
     if (!analysis || !buildFns) return null;
@@ -267,7 +267,7 @@ export default function RecipientInput({
 
   return (
     <div className={`space-y-2 ${className}`}>
-      {/* 헤더 행: 라벨 + 업로드/인포 */}
+      {/* Header row: label + upload/info */}
       {(label || showImport) && (
         <div className="flex items-center justify-between gap-2">
           <label className="text-[11px] text-muted">{label ?? ""}</label>
@@ -307,7 +307,7 @@ export default function RecipientInput({
         placeholder={placeholder ?? DEFAULT_PLACEHOLDER}
       />
 
-      {/* 결과 칩 — 클릭하면 상세 패널 토글 */}
+      {/* Result chips — click to toggle the detail panel */}
       {(rows.length > 0 || ignoredCount > 0 || dupCount > 0) && (
         <div className="flex items-center flex-wrap gap-1.5">
           {rows.length > 0 && (
@@ -324,7 +324,7 @@ export default function RecipientInput({
         </div>
       )}
 
-      {/* 펼침 패널 — 실패(무시)부터, 그 아래 인식 성공. 동일한 행 레이아웃에 색으로만 구분 */}
+      {/* Expand panel — failed (ignored) first, then recognized below. Same row layout, distinguished only by color */}
       {resultOpen && (rows.length > 0 || ignoredCount > 0) && (
         <div className="rounded-lg border border-border bg-surface max-h-56 overflow-y-auto">
           <table className="w-full text-[12px]">
@@ -379,7 +379,7 @@ export default function RecipientInput({
         <div className="text-[11px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{importErr}</div>
       )}
 
-      {/* 임포트 컬럼 매핑 확인 패널 */}
+      {/* Import column-mapping confirmation panel */}
       {analysis && pendingReport && (
         <div className="rounded-lg border border-brand/40 bg-surface p-3 space-y-2.5">
           <div className="flex items-center gap-2 flex-wrap">
@@ -403,7 +403,7 @@ export default function RecipientInput({
             </label>
           </div>
 
-          {/* 컬럼 역할 매핑 */}
+          {/* Column role mapping */}
           <div className="flex flex-wrap gap-2">
             {effectiveLabels.map((label2, c) => (
               <div key={c} className="flex items-center gap-1.5 rounded border border-border bg-surface2/40 px-2 py-1">
@@ -414,7 +414,7 @@ export default function RecipientInput({
                   onChange={(e) => {
                     const next = [...roles];
                     const v = e.target.value as ColumnRole;
-                    // 이메일 역할은 한 컬럼만
+                    // Only one column may have the email role
                     if (v === "email") for (let i = 0; i < next.length; i++) if (next[i] === "email") next[i] = "ignore";
                     next[c] = v;
                     setRoles(next);
@@ -436,7 +436,7 @@ export default function RecipientInput({
             )}
           </div>
 
-          {/* 결과 미리보기 */}
+          {/* Result preview */}
           <div className="rounded border border-border bg-surface2/30 max-h-32 overflow-y-auto">
             <table className="w-full text-[11.5px]">
               <tbody>

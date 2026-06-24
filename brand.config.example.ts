@@ -1,57 +1,57 @@
 /**
  * ────────────────────────────────────────────────────────────────────────────
- *  BRAND CONFIG — 화이트라벨 단일 설정 소스 (white-label single source of truth)
+ *  BRAND CONFIG — white-label single source of truth
  * ────────────────────────────────────────────────────────────────────────────
  *
- *  이 파일 하나(+ 비밀은 .env.local)만 바꾸면 앱 전체가 다른 회사/개인 브랜드로 전환된다.
- *  코드 본문(lib/, app/)에는 어떤 브랜드 종속 값도 하드코딩하지 않는다 — 전부 여기서 import.
+ *  Changing this one file (+ secrets in .env.local) switches the whole app to a different company/personal brand.
+ *  No brand-dependent values are hardcoded in the code body (lib/, app/) — everything is imported from here.
  *
- *  ⚠️  비밀(secret)은 절대 여기 넣지 말 것.
- *      API 키·토큰·시크릿·비밀번호는 `.env.local` 에만. 이 파일은 클라이언트 번들에
- *      포함될 수 있으므로 "공개돼도 되는 브랜드 정보"만 담는다.
+ *  ⚠️  Never put secrets here.
+ *      API keys, tokens, secrets, and passwords go only in `.env.local`. This file may be
+ *      included in the client bundle, so it holds only "brand info that's safe to be public".
  *
- *  ── 처음 쓰는 사람에게 ──
- *  1) 맨 위 "브랜드 기준값"과 "디자인 토큰"을 본인 값으로 교체 → 앱·이메일 전체에 전파
- *  2) `auth.mode` 로 로그인 방식 선택 (password = 간단 / google = Workspace)
- *  3) `.env.local` 에 키 채우기 (.env.local.example 복사)
- *  상세 절차·발급처는 docs/SETUP.md, 화이트라벨 구조는 docs/WHITELABEL.md.
+ *  ── For first-time users ──
+ *  1) Replace the top "brand baseline values" and "design tokens" with your own → propagates across the whole app and emails
+ *  2) Choose the login method with `auth.mode` (password = simple / google = Workspace)
+ *  3) Fill in keys in `.env.local` (copy .env.local.example)
+ *  Detailed steps and where to get credentials are in docs/SETUP.md; the white-label structure is in docs/WHITELABEL.md.
  * ────────────────────────────────────────────────────────────────────────────
  */
 
-// ── 브랜드 기준값 (한 곳만 바꾸면 문구·발신자에 전파) ──────────────────────────
-const COMPANY = "Acme";                                    // 회사/서비스 표시명
-const LEGAL_NAME = "Acme Inc.";                            // 법적 전송자 명칭 (컴플라이언스 푸터)
-// 도메인은 순수 상수로 고정한다(클라이언트가 렌더 → env 의존 시 hydration 불일치).
-const LOGIN_DOMAIN = "example.com";                        // Google 로그인 허용 Workspace 도메인 (google 모드용)
-const SENDER_DOMAIN = "send.example.com";                  // 발신(From) 허용 도메인 (★발송 차단의 핵심)
-const WEBSITE_URL = "https://www.example.com";             // 회사 홈페이지 (이메일 푸터 로고 링크)
+// ── Brand baseline values (change in one place; propagates to copy and senders) ──
+const COMPANY = "Acme";                                    // company/service display name
+const LEGAL_NAME = "Acme Inc.";                            // legal sender name (compliance footer)
+// Domains are fixed as pure constants (client renders → env dependence causes hydration mismatch).
+const LOGIN_DOMAIN = "example.com";                        // Workspace domain allowed for Google login (for google mode)
+const SENDER_DOMAIN = "send.example.com";                  // allowed sending (From) domain (★core of send blocking)
+const WEBSITE_URL = "https://www.example.com";             // company homepage (email footer logo link)
 
-// 이미지(로고·아이콘) 호스팅 베이스 — 공개 읽기 가능한 CDN/버킷 URL.
+// Hosting base for images (logos/icons) — a publicly readable CDN/bucket URL.
 const ASSET_BASE = "https://cdn.example.com/assets";
 
-// ── 디자인 토큰 (의미 단위) ────────────────────────────────────────────────────
-//  이 색들만 바꾸면 "이메일 본문 + 앱 콘솔 UI" 디자인이 한 번에 전환된다.
-//  (이메일은 lib/blocks.ts, 앱 UI는 app/layout.tsx 가 여기서 색을 주입받는다.)
-const PRIMARY        = "#5b5bf0";   // 브랜드 강조 — 링크·kicker·번호·통계·앱 액센트
-const PRIMARY_CTA    = "#7c7cff";   // CTA 버튼 배경 (그라데이션 밝은 쪽)
-const PRIMARY_DEEP   = "#4a4ad6";   // 진한 강조 — 앱 좌측 레일·hover
-const TEXT_HEADING   = "#0f0f1a";   // 제목
-const TEXT_BODY      = "#4a4a55";   // 본문
-const TEXT_SUB       = "#6a6a75";   // 보조 텍스트
-const TEXT_MUTED     = "#8a8a95";   // 푸터/코멘트
-const HAIRLINE       = "#eceef5";   // 얇은 구분선
-const CARD_BORDER    = "#e0e2ec";   // 카드(그리드) 테두리
-const TINT_BG        = "#eef0ff";   // 배지/강조 배경
-const TINT_BORDER    = "#dce0ff";   // 배지 테두리
-const EMAIL_PAGE_BG  = "#f5f5f5";   // 이메일 바깥 페이지 배경
-const EMAIL_SURFACE  = "#ffffff";   // 이메일 카드 배경
-const EMAIL_SURFACE_BORDER = "#e5e5e5"; // 이메일 카드 테두리
+// ── Design tokens (by meaning) ─────────────────────────────────────────────────
+//  Changing just these colors switches the "email body + app console UI" design all at once.
+//  (Emails get colors injected here via lib/blocks.ts, the app UI via app/layout.tsx.)
+const PRIMARY        = "#5b5bf0";   // brand accent — links, kicker, numbers, stats, app accent
+const PRIMARY_CTA    = "#7c7cff";   // CTA button background (lighter end of the gradient)
+const PRIMARY_DEEP   = "#4a4ad6";   // deep accent — app left rail, hover
+const TEXT_HEADING   = "#0f0f1a";   // headings
+const TEXT_BODY      = "#4a4a55";   // body
+const TEXT_SUB       = "#6a6a75";   // secondary text
+const TEXT_MUTED     = "#8a8a95";   // footer/comments
+const HAIRLINE       = "#eceef5";   // thin divider
+const CARD_BORDER    = "#e0e2ec";   // card (grid) border
+const TINT_BG        = "#eef0ff";   // badge/accent background
+const TINT_BORDER    = "#dce0ff";   // badge border
+const EMAIL_PAGE_BG  = "#f5f5f5";   // email outer page background
+const EMAIL_SURFACE  = "#ffffff";   // email card background
+const EMAIL_SURFACE_BORDER = "#e5e5e5"; // email card border
 
 export type BrandFromOption = { value: string; label: string; builtin?: boolean };
 export type BrandLogo = { id: string; label: string; url: string; width: number };
 
 export const brand = {
-  // ── 정체성 ──────────────────────────────────────────────────────────────
+  // ── Identity ────────────────────────────────────────────────────────────
   identity: {
     companyName: COMPANY,
     legalName: LEGAL_NAME,
@@ -59,130 +59,130 @@ export const brand = {
     appTitle: `${COMPANY} Email Blast`,
     appDescription: "Email blast tool",
     websiteUrl: WEBSITE_URL,
-    /** 앱 공개 베이스 URL (수신거부 링크 등 발송 루프에서 사용). env(APP_BASE_URL) override. */
+    /** App public base URL (used in the send loop, e.g. unsubscribe links). env(APP_BASE_URL) override. */
     appBaseUrl: (process.env.APP_BASE_URL || "https://email-blast.example.com").replace(/\/+$/, ""),
   },
 
-  // ── 인증/도메인 ─────────────────────────────────────────────────────────
+  // ── Auth/domain ───────────────────────────────────────────────────────────
   auth: {
-    /** 로그인 방식 스위치 — 이 한 줄로 두 버전을 전환한다.
-     *   "password" : 구글 없이 단일 비밀번호 게이트(비번 값은 .env.local 의 ACCESS_PASSWORD).
-     *   "google"   : Google Workspace 로그인(@loginDomain 제한). GOOGLE_CLIENT_* 필요. */
+    /** Login method switch — this one line toggles between the two versions.
+     *   "password" : single-password gate without Google (password value is ACCESS_PASSWORD in .env.local).
+     *   "google"   : Google Workspace login (@loginDomain restricted). Requires GOOGLE_CLIENT_*. */
     mode: "password" as "password" | "google",
-    /** password 모드의 단일 운영자 신원 = 자동 관리자. (세션·발신자 소유·감사에 사용) */
+    /** The single operator identity in password mode = automatic admin. (used for session, sender ownership, audit) */
     operatorEmail: "you@example.com",
-    /** password 모드 운영자 표시 이름(발신 표시명 자동 생성에 사용). 비우면 이메일에서 유추. */
+    /** Operator display name in password mode (used to auto-generate the sender display name). If empty, inferred from the email. */
     operatorName: COMPANY,
-    /** Google Workspace 로그인 허용 도메인 (google 모드용). */
+    /** Domain allowed for Google Workspace login (for google mode). */
     loginDomain: LOGIN_DOMAIN,
-    /** 발신자(From)에 허용되는 이메일 도메인. */
+    /** Email domain allowed for the sender (From). */
     senderDomain: SENDER_DOMAIN,
   },
 
-  // ── 발신자 / 컴플라이언스 ──────────────────────────────────────────────
+  // ── Senders / compliance ──────────────────────────────────────────────
   senders: {
-    /** 내장 발신자(항상 존재, 삭제 불가). 운영자 추가분은 data/from.json.
-     *  ⚠️ 최소 1개 필요 (FROM_DEFAULT 가 [0] 참조). senderDomain 과 일치시킬 것. */
+    /** Built-in sender (always present, cannot be deleted). Operator additions live in data/from.json.
+     *  ⚠️ At least 1 required (FROM_DEFAULT references [0]). Keep it matching senderDomain. */
     builtinFrom: [
       { value: `${COMPANY} <hello@${SENDER_DOMAIN}>`, label: COMPANY, builtin: true },
     ] as BrandFromOption[],
-    /** 회신(Reply-To) 기본값. senderDomain 밖(예: gmail)이어도 이 값은 허용된다(resolveReplyTo). */
+    /** Default Reply-To. This value is allowed even outside senderDomain (e.g. gmail) (resolveReplyTo). */
     replyToDefault: "inquiry@example.com",
-    /** 전송자 명칭 (정보통신망법 제50조 제4항). env(SENDER_ORG_NAME) override. */
+    /** Sender name (Network Act Article 50(4)). env(SENDER_ORG_NAME) override. */
     orgName: process.env.SENDER_ORG_NAME || LEGAL_NAME,
-    /** 발신자 물리 우편주소 (CAN-SPAM). 비면 푸터에서 생략. env(SENDER_POSTAL_ADDRESS) override.
-     *  ⚠️ 외부 발송 전 반드시 채울 것 (법적 의무). */
+    /** Sender physical postal address (CAN-SPAM). Omitted from the footer if empty. env(SENDER_POSTAL_ADDRESS) override.
+     *  ⚠️ Must be filled before external sends (legal requirement). */
     postalAddress: process.env.SENDER_POSTAL_ADDRESS || "",
-    /** 컴플라이언스 연락 이메일 (수신거부 mailto). env(SENDER_CONTACT_EMAIL) override. */
+    /** Compliance contact email (unsubscribe mailto). env(SENDER_CONTACT_EMAIL) override. */
     contactEmail: process.env.SENDER_CONTACT_EMAIL || "inquiry@example.com",
   },
 
-  // ── 이메일 본문 렌더 (lib/blocks.ts) ───────────────────────────────────
+  // ── Email body render (lib/blocks.ts) ───────────────────────────────────
   email: {
-    /** 이메일 색상. ⚠️ 키 이름(teal/mint/tealTint…)은 lib/blocks.ts·UI 토큰이 참조하므로
-     *  바꾸지 말 것 — 값은 위 "디자인 토큰"에서 파생된다(한 곳에서 관리). */
+    /** Email colors. ⚠️ Don't change the key names (teal/mint/tealTint…) — lib/blocks.ts and UI tokens
+     *  reference them; the values are derived from the "design tokens" above (managed in one place). */
     colors: {
-      teal: PRIMARY,            // 강조/포인트 (kicker·번호·stat·링크)
-      mint: PRIMARY_CTA,        // CTA 버튼 배경
-      ink: TEXT_HEADING,        // 제목
-      body: TEXT_BODY,          // 본문
-      sub: TEXT_SUB,            // 보조 텍스트
-      muted: TEXT_MUTED,        // 푸터/코멘트
-      hair: HAIRLINE,           // 구분선
-      cardBorder: CARD_BORDER,  // 카드 테두리
-      tealTintBg: TINT_BG,      // 배지 배경
-      tealTintBorder: TINT_BORDER, // 배지 테두리
+      teal: PRIMARY,            // accent/highlight (kicker, numbers, stat, links)
+      mint: PRIMARY_CTA,        // CTA button background
+      ink: TEXT_HEADING,        // headings
+      body: TEXT_BODY,          // body
+      sub: TEXT_SUB,            // secondary text
+      muted: TEXT_MUTED,        // footer/comments
+      hair: HAIRLINE,           // divider
+      cardBorder: CARD_BORDER,  // card border
+      tealTintBg: TINT_BG,      // badge background
+      tealTintBorder: TINT_BORDER, // badge border
     },
-    /** 이메일 골격 색(페이지 배경·카드). 위 디자인 토큰에서 파생. */
+    /** Email skeleton colors (page background, cards). Derived from the design tokens above. */
     surfaces: {
       pageBg: EMAIL_PAGE_BG,
       card: EMAIL_SURFACE,
       cardBorder: EMAIL_SURFACE_BORDER,
     },
     mono: "Menlo,'SF Mono',Consolas,'Liberation Mono',monospace",
-    /** 헤더(상단) 기본 로고 — spec.logo 미설정 시 사용. 본인 로고 공개 URL로 교체. */
+    /** Header (top) default logo — used when spec.logo is unset. Replace with your own logo's public URL. */
     headerLogo: { url: `${ASSET_BASE}/header-logo.png`, alt: COMPANY, width: 130 },
-    /** 푸터(하단) 로고 + 클릭 링크. */
+    /** Footer (bottom) logo + click link. */
     footerLogo: { url: `${ASSET_BASE}/footer-logo.png`, alt: COMPANY, link: WEBSITE_URL, width: 100, height: 16 },
-    /** 푸터 소셜 아이콘 이미지. */
+    /** Footer social icon images. */
     socialIcons: {
       x: `${ASSET_BASE}/x-logo.png`,
       linkedin: `${ASSET_BASE}/linkedin-logo.png`,
       youtube: `${ASSET_BASE}/youtube-logo.png`,
     },
-    /** 푸터 소셜 링크 (빈 문자열이면 해당 아이콘 자동 숨김). 본인 SNS 있으면 채울 것. */
+    /** Footer social links (an empty string auto-hides that icon). Fill in if you have your own social accounts. */
     social: {
       x: "",
       linkedin: "",
       youtube: "",
     },
-    /** 푸터 문의 이메일 기본값 (footer.inquiryEmail 미설정 시). */
+    /** Default footer inquiry email (when footer.inquiryEmail is unset). */
     defaultInquiry: "inquiry@example.com",
   },
 
-  // ── 자산(이미지) 스토리지 ───────────────────────────────────────────────
-  // provider 만 바꾸면 스토리지가 교체된다 (어댑터: lib/storage/adapters/*).
-  // ⚠️ 여기엔 provider 이름·공개 URL만. 자격증명(키)은 .env.local 에서.
+  // ── Asset (image) storage ───────────────────────────────────────────────
+  // Changing just the provider swaps the storage (adapters: lib/storage/adapters/*).
+  // ⚠️ Only provider name and public URLs here. Credentials (keys) go in .env.local.
   assets: {
-    /** 이미지 저장 백엔드 (lib/storage/index.ts 의 ADAPTERS 와 일치).
-     *  "local" = 외부 계정 0개(서버 디스크 저장 + 앱이 /api/assets 로 서빙).
-     *  "azure" 등 = 오브젝트 스토리지(대량·CDN). 키는 .env.local. */
+    /** Image storage backend (matches ADAPTERS in lib/storage/index.ts).
+     *  "local" = zero external accounts (stores on server disk + app serves via /api/assets).
+     *  "azure" etc. = object storage (bulk, CDN). Keys in .env.local. */
     provider: "local",
-    /** 이미지 전달 방식 (둘 다 지원, 이 한 줄로 전환):
-     *   "attach" = 발송 시 로컬 이미지를 메일에 CID 인라인 첨부 → 외부 호스팅·공개 URL 불필요.
-     *              개인·소수 발송 최적(단, 수신자마다 이미지 재전송 → 대량엔 비효율). 메일당 40MB 한도.
-     *   "hosted" = 이미지 URL 그대로 참조(메일 클라이언트가 외부 로드). 대량에 효율적이나
-     *              앱(또는 스토리지)이 공개 도메인으로 떠 있어야 함. */
+    /** Image delivery method (both supported, toggled by this one line):
+     *   "attach" = on send, inline-attach local images to the mail via CID → no external hosting/public URL needed.
+     *              Best for personal/small sends (but resends images per recipient → inefficient at scale). 40MB per mail limit.
+     *   "hosted" = reference image URLs as-is (the mail client loads them externally). Efficient at scale but
+     *              the app (or storage) must be live on a public domain. */
     delivery: "attach" as "attach" | "hosted",
-    /** 내장 로고·아이콘 호스팅 베이스 (외부 CDN — attach 모드에서도 이 URL 은 hosted 로 남는다). */
+    /** Hosting base for built-in logos/icons (external CDN — this URL stays hosted even in attach mode). */
     base: ASSET_BASE,
   },
 
-  // ── 헤더 로고 레지스트리 (lib/logos.ts 내장 목록) ──────────────────────
+  // ── Header logo registry (built-in list in lib/logos.ts) ──────────────────────
   logos: [
     { id: "primary", label: COMPANY, url: `${ASSET_BASE}/header-logo.png`, width: 130 },
   ] as BrandLogo[],
 
-  // ── 템플릿 기본값 ───────────────────────────────────────────────────────
+  // ── Template defaults ───────────────────────────────────────────────────────
   templates: {
     defaultSubject: `[알림] ${COMPANY}`,
   },
 
-  // ── 앱 UI ──────────────────────────────────────────────────────────────
+  // ── App UI ──────────────────────────────────────────────────────────────
   ui: {
-    /** 상단 헤더 워드마크. */
+    /** Top header wordmark. */
     headerBrand: COMPANY,
-    /** 수신거부/재구독 공개 페이지 하단 워드마크. */
+    /** Wordmark at the bottom of the public unsubscribe/resubscribe page. */
     footerWordmark: COMPANY,
-    /** 앱 콘솔(웹 UI) 강조색 — app/layout.tsx 가 :root CSS 변수로 주입(이메일 색과 통일).
-     *  위 "디자인 토큰"에서 파생되므로 색은 한 곳에서만 바꾸면 된다. */
+    /** App console (web UI) accent color — app/layout.tsx injects it as a :root CSS variable (unified with email colors).
+     *  Derived from the "design tokens" above, so the color only needs to be changed in one place. */
     appAccent: PRIMARY,         // → --brand / --ring
     appAccentDeep: PRIMARY_DEEP, // → --brand-deep / --rail
-    appAccentBright: PRIMARY_CTA,// → --brand-mint (CTA 그라데이션 밝은 쪽)
+    appAccentBright: PRIMARY_CTA,// → --brand-mint (lighter end of the CTA gradient)
     login: {
       title: `${COMPANY} Email Blast`,
       subtitle: `${COMPANY} 계정으로 로그인하세요.`,
-      /** password 모드 로그인 화면 문구. */
+      /** Login screen copy for password mode. */
       passwordSubtitle: `접근하려면 비밀번호를 입력하세요.`,
       domainNotice: `@${LOGIN_DOMAIN} 계정만 접근할 수 있습니다.`,
       domainError: `@${LOGIN_DOMAIN} 계정만 로그인할 수 있습니다.`,

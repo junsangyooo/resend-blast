@@ -15,9 +15,9 @@ const REASON_LABEL: Record<string, string> = {
 type Tab = "suppression" | "senders" | "admins";
 
 /**
- * 설정 — 수신거부/반송(전원) + 발신자 관리(관리자) + 관리자 관리(관리자).
- * 발신자/관리자 탭은 비관리자에게 자물쇠로 표시되고 선택 불가.
- * 서버가 권한을 강제하므로 여기 UI 는 편의 제공.
+ * Settings — unsubscribe/bounce (everyone) + sender management (admin) + admin management (admin).
+ * The sender/admin tabs are shown locked to non-admins and cannot be selected.
+ * The server enforces permissions, so this UI is for convenience.
  */
 export default function AdminSettings({
   open, isAdmin = false, onClose, onChanged,
@@ -36,7 +36,7 @@ export default function AdminSettings({
   const [newAdmin, setNewAdmin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [lockPopup, setLockPopup] = useState<string | null>(null); // 잠긴 탭 클릭 시 잠깐 뜨는 팝업
+  const [lockPopup, setLockPopup] = useState<string | null>(null); // popup that briefly appears when a locked tab is clicked
 
   useEscClose(open, onClose);
 
@@ -45,13 +45,13 @@ export default function AdminSettings({
     setErr("");
     setTab("suppression");
     refresh();
-    // isAdmin 은 /api/config 응답 후에 도착할 수 있으므로 deps 에 포함 — 늦게 true 가 되어도 재조회.
+    // isAdmin may arrive after the /api/config response, so include it in deps — refetch even if it becomes true late.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isAdmin]);
 
   async function refresh() {
     const [s, u, a] = await Promise.all([
-      // 관리자는 personal 포함 전체 조회 — 레거시/타인 personal 항목도 정리 가능해야 함.
+      // admins fetch everything including personal — must be able to clean up legacy/other users' personal entries too.
       fetch(isAdmin ? "/api/from?all=1" : "/api/from").then((r) => r.json()).catch(() => ({ senders: [] })),
       fetch("/api/suppression").then((r) => r.json()).catch(() => ({ suppressions: [] })),
       isAdmin ? fetch("/api/admins").then((r) => r.json()).catch(() => ({ admins: [] })) : Promise.resolve({ admins: [] }),
@@ -71,7 +71,7 @@ export default function AdminSettings({
     try {
       const dn = displayName.trim();
       const em = email.trim();
-      // 이름이 곧 수신자 메일함에 보이는 보낸사람. 내부에서 "이름 <주소>" 로 합성.
+      // the name is the sender shown in the recipient's mailbox. Composed internally as "name <address>".
       const value = dn ? `${dn} <${em}>` : em;
       const r = await fetch("/api/from", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -137,9 +137,9 @@ export default function AdminSettings({
 
   if (!open) return null;
 
-  // 설정 탭에서는 공용 발신자를 관리 (개인 닉네임은 발송 화면에서 본인이 설정).
+  // the settings tab manages shared senders (personal nicknames are set by each user on the send screen).
   const sharedSenders = senders.filter((s) => s.builtin || s.scope !== "personal");
-  // 관리자에게만 보이는 개인 발신자 목록 — 잘못 등록된 항목 정리용.
+  // personal sender list visible only to admins — for cleaning up wrongly registered entries.
   const personalSenders = senders.filter((s) => !s.builtin && s.scope === "personal");
 
   const lockedTabBtn = (key: Tab, label: string) => (

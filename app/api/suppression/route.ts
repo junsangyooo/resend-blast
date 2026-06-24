@@ -6,7 +6,7 @@ import { isAdminAsync } from "@/lib/admins";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 수신거부/반송/스팸신고 억제 목록. 조회는 누구나, 해제는 관리자만(오등록 복구용). */
+/** Unsubscribe/bounce/complaint suppression list. Anyone can view, only admins can remove (for recovering mis-registrations). */
 export async function GET() {
   return NextResponse.json({ suppressions: await listSuppressions() });
 }

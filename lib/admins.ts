@@ -1,7 +1,7 @@
 /**
- * 관리자 레지스트리 — env ADMIN_EMAILS(영구 시드) + data/admins.json(런타임 추가).
- * 관리자는 설정 UI에서 관리자를 추가/삭제할 수 있다 (시드·본인은 삭제 불가).
- * 파일 쓰기는 atomic + per-key lock (다른 운영 데이터와 동일 패턴).
+ * Admin registry — env ADMIN_EMAILS (permanent seed) + data/admins.json (added at runtime).
+ * Admins can add/remove admins from the settings UI (seeds and oneself cannot be deleted).
+ * File writes use atomic + per-key lock (same pattern as other operational data).
  */
 import fs from "fs/promises";
 import path from "path";
@@ -22,7 +22,7 @@ async function readFileAdmins(): Promise<string[]> {
     : [];
 }
 
-/** 유효 관리자 전체 = env 시드 ∪ 파일. 시드는 삭제 불가 표시. */
+/** All effective admins = env seed ∪ file. Seeds marked as non-deletable. */
 export async function listAdmins(): Promise<AdminEntry[]> {
   const seeds = adminEmails();
   const file = await readFileAdmins();
@@ -33,22 +33,22 @@ export async function listAdmins(): Promise<AdminEntry[]> {
   return out;
 }
 
-/** env 시드 + 파일 등록분을 모두 보는 관리자 판정. 라우트는 반드시 이걸 사용. */
+/** Admin check that sees both env seeds and file-registered entries. Routes must use this. */
 export async function isAdminAsync(email?: string | null): Promise<boolean> {
   if (!email) return false;
   const e = email.toLowerCase();
-  // password 모드: 단일 운영자(brand.auth.operatorEmail)는 항상 관리자.
+  // password mode: the single operator (brand.auth.operatorEmail) is always an admin.
   if (brand.auth.mode === "password" && e === brand.auth.operatorEmail.toLowerCase()) return true;
   if (adminEmails().includes(e)) return true;
   return (await readFileAdmins()).includes(e);
 }
 
-/** 리소스 소유자 또는 관리자인지. 소유자 정보가 없는 레거시 리소스는 누구나 편집 허용. */
+/** Whether the actor is the resource owner or an admin. Legacy resources without owner info are editable by anyone. */
 export async function canManageAsync(
   ownerEmail: string | undefined | null,
   actorEmail: string | undefined | null,
 ): Promise<boolean> {
-  if (!ownerEmail) return true; // 레거시(소유자 미기록) — 잠그지 않음
+  if (!ownerEmail) return true; // legacy (no owner recorded) — not locked
   if (!actorEmail) return false;
   if (ownerEmail.toLowerCase() === actorEmail.toLowerCase()) return true;
   return isAdminAsync(actorEmail);
@@ -56,7 +56,7 @@ export async function canManageAsync(
 
 const LOGIN_DOMAIN = brand.auth.loginDomain;
 
-/** 관리자 추가 (관리자만 — 라우트에서 강제). 로그인 도메인 계정만 허용. */
+/** Add an admin (admin-only — enforced in the route). Only login-domain accounts allowed. */
 export async function addAdmin(email: string): Promise<AdminEntry> {
   const e = String(email ?? "").toLowerCase().trim();
   if (!e) throw new Error("이메일이 비어 있습니다");
@@ -70,7 +70,7 @@ export async function addAdmin(email: string): Promise<AdminEntry> {
   });
 }
 
-/** 관리자 삭제 — env 시드와 본인은 삭제 불가(잠금 사고 방지). */
+/** Remove an admin — env seeds and oneself cannot be deleted (prevents lockout accidents). */
 export async function removeAdmin(email: string, actor: string): Promise<{ ok: boolean; reason?: string }> {
   const e = String(email ?? "").toLowerCase().trim();
   if (adminEmails().includes(e)) return { ok: false, reason: "고정 관리자(환경설정)는 삭제할 수 없습니다" };

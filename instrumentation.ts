@@ -1,7 +1,7 @@
 /**
- * Next.js 서버 부팅 시 1회 실행되는 hook.
- * - 발송 중 죽었던 `running` send 를 aborted 로 정리한다 (data/sends/*.json).
- * - Edge runtime 에선 fs 접근 불가 → nodejs runtime 일 때만 실행.
+ * Hook that runs once on Next.js server boot.
+ * - Cleans up `running` sends that died mid-send by marking them aborted (data/sends/*.json).
+ * - fs is inaccessible on the Edge runtime → only runs on the nodejs runtime.
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -13,7 +13,7 @@ export async function register() {
       console.log(`[instrumentation] cleaned up ${fixed} stale running send(s)`);
     }
   } catch (e) {
-    // 부팅을 막지 않는다. 라우트 처리 중에도 lazy cleanup 백업이 있음 (/api/sends).
+    // Don't block boot. There's a lazy cleanup backup during route handling too (/api/sends).
     // eslint-disable-next-line no-console
     console.warn("[instrumentation] cleanupStaleSends failed:", e);
   }

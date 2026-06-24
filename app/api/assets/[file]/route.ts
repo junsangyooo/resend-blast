@@ -1,6 +1,6 @@
 /**
- * 로컬 업로드 이미지 서빙 — delivery="hosted" 일 때 메일 클라이언트가 외부에서 로드.
- * 공개 라우트(미들웨어 allowlist). path traversal 방지 + 안전한 파일명만 허용.
+ * Serves locally uploaded images — loaded externally by the mail client when delivery="hosted".
+ * Public route (middleware allowlist). Prevents path traversal + allows only safe filenames.
  */
 import { NextRequest } from "next/server";
 import { promises as fs } from "fs";
@@ -20,7 +20,7 @@ const CONTENT_TYPE: Record<string, string> = {
 
 export async function GET(_req: NextRequest, { params }: { params: { file: string } }) {
   const file = params.file ?? "";
-  // 안전한 파일명만 (영숫자·._-), 디렉토리 분리자/상위참조 차단.
+  // Safe filenames only (alphanumeric, ._-); block directory separators/parent references.
   if (!/^[a-zA-Z0-9._-]+$/.test(file) || file.includes("..")) {
     return new Response("Not found", { status: 404 });
   }

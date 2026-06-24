@@ -7,13 +7,13 @@ import { useEscClose } from "./hooks";
 export type ConfirmRecipient = { email: string; name?: string; source: string };
 
 /**
- * 발송 최종 확인 — 3-pane 대형 모달.
- *  좌: 발송 요약 (이메일·발신자·리스트·수신자 수)
- *  중앙: 선택된 수신자에게 실제로 도착할 모습 (개인화 치환 완료 렌더)
- *  우: 전체 수신자 리스트 (검색·클릭으로 미리보기 대상 전환, 첫 수신자 기본 선택)
+ * Final send confirmation — large 3-pane modal.
+ *  Left: send summary (email, sender, list, recipient count)
+ *  Center: how it will actually arrive for the selected recipient (personalization-applied render)
+ *  Right: full recipient list (switch preview target by search/click, first recipient selected by default)
  *
- * 치환은 토큰 보존 HTML(/api/templates?built=)을 1회 받아 클라이언트에서 수행 —
- * 수신자 전환에 네트워크 왕복이 없다. 수신거부/반송 명단도 함께 조회해 제외 표시.
+ * Replacement is done client-side from token-preserving HTML (/api/templates?built=) fetched once —
+ * no network round-trip when switching recipients. Also fetches the unsubscribe/bounce list to mark exclusions.
  */
 export default function ConfirmSendModal({
   template,
@@ -46,7 +46,7 @@ export default function ConfirmSendModal({
 
   useEscClose(true, onClose);
 
-  // 토큰 보존 HTML + 수신거부 명단 1회 로드
+  // load token-preserving HTML + unsubscribe list once
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -90,14 +90,14 @@ export default function ConfirmSendModal({
 
   const selected = recipients.find((r) => r.email === selectedEmail) ?? shown[0] ?? recipients[0];
 
-  // 선택 수신자 기준 실제 발송본 (수신거부 URL 만 발송 시 서명 URL 로 치환됨)
+  // actual send copy for the selected recipient (only the unsubscribe URL is replaced with a signed URL at send time)
   const personalizedHtml = useMemo(() => {
     if (rawHtml === null || !selected) return null;
     return fillPlaceholders(rawHtml, { name: selected.name, email: selected.email, unsubscribeUrl: "#" });
   }, [rawHtml, selected]);
   const personalizedSubject = selected ? fillSubject(adSubject, { name: selected.name, email: selected.email }) : adSubject;
 
-  // 키보드 ↑/↓ 로 수신자 전환
+  // switch recipient with ↑/↓ keys
   function onListKeyDown(e: React.KeyboardEvent) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
@@ -112,7 +112,7 @@ export default function ConfirmSendModal({
         className="card w-[min(1200px,95vw)] h-[88vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 헤더 */}
+        {/* header */}
         <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <div className="kicker">최종 확인</div>
@@ -121,9 +121,9 @@ export default function ConfirmSendModal({
           <button onClick={onClose} className="icon-btn" aria-label="닫기">✕</button>
         </div>
 
-        {/* 본문 3-pane */}
+        {/* body 3-pane */}
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[250px_minmax(0,1fr)_290px]">
-          {/* 좌: 요약 */}
+          {/* left: summary */}
           <div className="border-b lg:border-b-0 lg:border-r border-border p-4 overflow-y-auto space-y-4">
             <dl className="text-[13px] space-y-2.5">
               <Row label="이메일"><span className="font-mono text-[12px]">{template}</span></Row>
@@ -150,7 +150,7 @@ export default function ConfirmSendModal({
             </p>
           </div>
 
-          {/* 중앙: 개인화 완료 미리보기 */}
+          {/* center: personalization-applied preview */}
           <div className="border-b lg:border-b-0 lg:border-r border-border flex flex-col min-h-0 bg-surface2/40">
             <div className="px-4 py-2 border-b border-border shrink-0 bg-surface">
               <div className="text-[10px] text-muted">받는 사람: <span className="font-mono">{selected ? `${selected.name ? `${selected.name} ` : ""}<${selected.email}>` : "—"}</span></div>
@@ -172,7 +172,7 @@ export default function ConfirmSendModal({
             </div>
           </div>
 
-          {/* 우: 수신자 리스트 */}
+          {/* right: recipient list */}
           <div className="flex flex-col min-h-0">
             <div className="p-3 border-b border-border shrink-0 space-y-2">
               <input
@@ -225,7 +225,7 @@ export default function ConfirmSendModal({
           </div>
         </div>
 
-        {/* 푸터 */}
+        {/* footer */}
         <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2 shrink-0">
           <button onClick={onClose} className="btn-ghost">취소</button>
           <button onClick={onConfirm} className="btn-primary">{effectiveCount}명에게 발송</button>

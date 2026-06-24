@@ -4,20 +4,20 @@ const NAME_EMAIL_RE = /([^,;\s<>"']+@[^,;\s<>"']+)\s*(?:>|$)/g;
 export type Recipient = { email: string; name?: string };
 
 /**
- * "홍길동 <a@b.com>" / "Name a@b.com" / "<a@b.com>" / raw 등 다양한 형식에서
- * 이메일을 안전하게 추출. 토큰화 전에 `<email>` 패턴을 먼저 추출하므로
- * 이름의 공백이 invalid를 만들지 않는다.
+ * Safely extract emails from various formats like "홍길동 <a@b.com>" / "Name a@b.com" /
+ * "<a@b.com>" / raw. It extracts the `<email>` pattern before tokenizing, so spaces in
+ * the name don't produce invalid tokens.
  */
 function extractEmails(raw: string): string[] {
   const found: string[] = [];
   const angled: string[] = [];
-  // 1차: "Name <email>" 또는 단독 <email> 형식
+  // Pass 1: "Name <email>" or standalone <email> form
   for (const m of raw.matchAll(/<\s*([^<>]+?)\s*>/g)) {
     angled.push(m[1]);
   }
   let remainder = raw.replace(/<\s*[^<>]+?\s*>/g, " ");
   found.push(...angled);
-  // 2차: 그 외 위치의 토큰 — 공백·쉼표·세미콜론·따옴표로 분리
+  // Pass 2: tokens elsewhere — split on whitespace/comma/semicolon/quotes
   for (const t of remainder.split(/[\s,;"']+/)) {
     const v = t.trim().replace(/^[<"']+|[>"']+$/g, "");
     if (v) found.push(v);
@@ -25,7 +25,7 @@ function extractEmails(raw: string): string[] {
   return found;
 }
 
-/** 자유 텍스트(줄바꿈/쉼표/세미콜론/공백 혼합)에서 이메일 추출 + 중복 제거. */
+/** Extract emails from free text (mixed line breaks/commas/semicolons/whitespace) + dedupe. */
 export function parseRecipients(raw: string): {
   valid: string[];
   invalid: string[];
@@ -46,7 +46,7 @@ export function parseRecipients(raw: string): {
   return { valid, invalid, duplicates: dupes };
 }
 
-/** {email, name?} 배열을 dedupe (email 기준, lowercase). 첫 이름 보존. */
+/** Dedupe a {email, name?} array (by email, lowercase). Keeps the first name. */
 export function dedupeRecipients(items: Recipient[]): Recipient[] {
   const seen = new Map<string, Recipient>();
   for (const it of items) {
@@ -62,21 +62,21 @@ export function isValidEmail(s: string): boolean {
   return EMAIL_RE.test(String(s ?? "").toLowerCase().trim());
 }
 
-// ── 그리드 붙여넣기 파서 (이름+이메일 매핑) ───────────────────────────────────
+// ── Grid paste parser (name+email mapping) ───────────────────────────────────
 export type GridParseResult = {
-  /** 유효한 수신자 (이메일 기준 dedupe, 첫 이름 보존). */
+  /** Valid recipients (deduped by email, first name kept). */
   rows: Recipient[];
-  /** 이메일을 못 찾았거나 형식오류라 버린 줄. */
+  /** Lines dropped because no email was found or it was malformed. */
   ignored: { line: string; reason: string }[];
-  /** 중복으로 제거된 이메일(lowercase). */
+  /** Emails removed as duplicates (lowercase). */
   duplicates: string[];
 };
 
-/** 한 셀에서 이메일/이름 추출. "홍길동 <a@b.com>" / "a@b.com" / "<a@b.com>" 지원. */
+/** Extract email/name from a single cell. Supports "홍길동 <a@b.com>" / "a@b.com" / "<a@b.com>". */
 function cellToEmail(cell: string): { email: string | null; name: string | null } {
   const c = cell.trim();
   if (!c) return { email: null, name: null };
-  // "이름 <addr>" 또는 "<addr>"
+  // "name <addr>" or "<addr>"
   const m = c.match(/^(.*?)<\s*([^<>]+?)\s*>$/);
   if (m) {
     const addr = m[2].replace(/^mailto:/i, "").trim().toLowerCase();
@@ -87,11 +87,11 @@ function cellToEmail(cell: string): { email: string | null; name: string | null 
   return { email: null, name: null };
 }
 
-/** 한 줄을 셀 배열로 분리. 탭 > 파이프 > 쉼표 우선, 없으면 공백 폴백.
- *  (탭·파이프·쉼표가 있으면 이름의 공백을 보존하기 위해 공백으로 자르지 않는다.) */
+/** Split a line into cells. Prefer tab > pipe > comma, falling back to whitespace.
+ *  (When tab/pipe/comma is present, don't split on whitespace so name spaces are preserved.) */
 function splitCells(line: string): string[] {
   let s = line.trim();
-  // 마크다운 표: 양끝 파이프 제거
+  // Markdown table: strip leading/trailing pipes
   if (s.startsWith("|")) s = s.slice(1);
   if (s.endsWith("|")) s = s.slice(0, -1);
   let parts: string[];
@@ -102,22 +102,23 @@ function splitCells(line: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-/** 마크다운 표 구분줄(`|---|:--:|`)인지. */
+/** Whether this is a markdown table separator row (`|---|:--:|`). */
 function isSeparatorRow(line: string): boolean {
   const s = line.trim();
   if (!s.includes("-")) return false;
   return /^\|?[\s:|-]+\|?$/.test(s) && s.replace(/[^-]/g, "").length > 0;
 }
 
-/** 헤더 키워드만 든 줄인지 (이메일 없음 + name/email 류 단어). */
+/** Whether the row holds only header keywords (no email + name/email-type words). */
 function isHeaderRow(cells: string[]): boolean {
   const kw = new Set(["email", "e-mail", "mail", "이메일", "name", "이름", "성명"]);
   return cells.length > 0 && cells.every((c) => kw.has(c.toLowerCase()));
 }
 
 /**
- * 엑셀·구글시트·노션표·마크다운표·CSV 어디서 복사해도 이름+이메일을 매핑한다.
- * "형식을 맞추지 말고 이메일 모양으로 잡는다" — 각 줄에서 이메일 칸을 찾고 나머지를 이름으로.
+ * Maps name+email no matter where it's copied from: Excel, Google Sheets, Notion tables,
+ * markdown tables, CSV. "Don't enforce a format, just catch the email shape" — find the
+ * email cell in each line and treat the rest as the name.
  */
 export function parseRecipientGrid(raw: string): GridParseResult {
   const ignored: GridParseResult["ignored"] = [];
@@ -148,13 +149,14 @@ export function parseRecipientGrid(raw: string): GridParseResult {
       const name = (emails[0].angleName ?? others.join(" ").trim()) || undefined;
       collected.push({ email: emails[0].email, name });
     } else {
-      // 한 줄에 이메일이 여러 개면 각각 한 행으로 (나머지 셀이 누구 이름인지 모호하므로
-      // angle-name 만 부착, 나머지는 이름 없이). 둘째 이후 주소가 사라지지 않게 한다.
+      // If a line has multiple emails, make each its own row (since it's ambiguous which
+      // name the remaining cells belong to, attach only the angle-name, the rest without a
+      // name). Ensures addresses after the first aren't lost.
       for (const e of emails) collected.push({ email: e.email, name: e.angleName ?? undefined });
     }
   }
 
-  // dedupe (첫 이름 보존) + 중복 목록
+  // dedupe (keep first name) + duplicate list
   const seen = new Set<string>();
   const rows: Recipient[] = [];
   const duplicates: string[] = [];
@@ -167,9 +169,10 @@ export function parseRecipientGrid(raw: string): GridParseResult {
 }
 
 /**
- * 자유텍스트에서 특정 이메일이 든 첫 줄을 찾아 그 사람의 이름만 교체한 텍스트를 반환.
- * (textarea 가 source of truth 이므로, 미리보기에서 이름을 고치면 텍스트 자체를 고쳐야
- *  서버 재파싱에도 반영된다.) 한 줄에 이메일이 여러 개면 한 명당 한 줄로 풀어쓴다.
+ * Find the first line in the free text containing a given email and return text with only
+ * that person's name replaced. (Since the textarea is the source of truth, editing the name
+ * in the preview must edit the text itself so server re-parsing reflects it.) If a line has
+ * multiple emails, expand it to one line per person.
  */
 export function setNameInText(raw: string, email: string, name: string): string {
   const target = email.toLowerCase().trim();

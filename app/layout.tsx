@@ -15,7 +15,7 @@ export const viewport: Viewport = {
   themeColor: "#F0F2F5",
 };
 
-/** "#5b5bf0" → "91 91 240" (globals.css 의 rgb(var(--brand)) 채널 포맷). */
+/** "#5b5bf0" → "91 91 240" (the rgb(var(--brand)) channel format in globals.css). */
 function rgbChannels(hex: string): string {
   const h = hex.replace(/^#/, "");
   const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
@@ -23,8 +23,8 @@ function rgbChannels(hex: string): string {
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
 }
 
-// 앱 콘솔 강조색을 brand.config 에서 주입 → 이메일과 동일 팔레트.
-// :root 인라인 스타일은 globals.css 의 :root 규칙을 이긴다(라이트/다크 공통 브랜드색).
+// Inject the app console accent color from brand.config → same palette as emails.
+// The :root inline style overrides the :root rule in globals.css (shared brand color for light/dark).
 const brandVars: React.CSSProperties = {
   ["--brand" as string]: rgbChannels(brand.ui.appAccent),
   ["--brand-deep" as string]: rgbChannels(brand.ui.appAccentDeep),

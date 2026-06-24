@@ -1,11 +1,11 @@
 /**
- * 이미지 형식 검증 — provider 무관 공통 로직.
+ * Image format validation — provider-agnostic shared logic.
  *
- * 어느 스토리지 백엔드를 쓰든 동일하게 적용되는 보안 검증이라 어댑터 밖에 둔다.
- * (이전엔 lib/azure.ts 안에 섞여 있었음.)
+ * Kept outside the adapters since it's security validation applied identically
+ * regardless of storage backend. (Previously mixed into lib/azure.ts.)
  */
 
-// SVG는 미리보기 iframe에서 스크립트 실행 위험이 있어 제거. PNG/JPG/GIF/WEBP만 허용.
+// SVG is removed due to the script-execution risk in the preview iframe. Only PNG/JPG/GIF/WEBP allowed.
 export const EXT_BY_TYPE: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -20,7 +20,7 @@ export function isAllowedImageType(type: string): boolean {
   return type in EXT_BY_TYPE;
 }
 
-/** 버퍼의 magic bytes로 실제 형식을 판별. 클라이언트가 신고한 content-type을 신뢰하지 않는다. */
+/** Detect the real format from the buffer's magic bytes. Don't trust the client-reported content-type. */
 export function detectImageType(buf: Buffer): keyof typeof EXT_BY_TYPE | null {
   if (buf.length < 12) return null;
   // PNG: 89 50 4E 47 0D 0A 1A 0A

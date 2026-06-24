@@ -80,7 +80,7 @@ describe("parseRecipientGrid — multi-source name+email mapping", () => {
   });
 
   it("탭 구분에 이메일 2개여도 둘 다 보존 (이름은 모호하면 생략)", () => {
-    // 탭으로 묶인 'Alice <alice@a.com>' 한 셀은 angle-name 이 붙고, 추가 이메일도 손실 안 됨.
+    // The tab-joined 'Alice <alice@a.com>' cell gets the angle-name, and the extra email isn't lost either.
     const r = parseRecipientGrid("Alice <alice@a.com>\tbob@b.com");
     expect(r.rows.map((x) => x.email).sort()).toEqual(["alice@a.com", "bob@b.com"]);
   });

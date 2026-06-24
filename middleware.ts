@@ -7,11 +7,11 @@ export async function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
-    // 공개 라우트: webhook(서명검증), 수신거부(토큰검증), 헬스체크 — 세션 불필요.
+    // Public routes: webhook (signature-verified), unsubscribe (token-verified), health check — no session needed.
     pathname.startsWith("/api/webhooks/") ||
     pathname.startsWith("/api/unsubscribe") ||
     pathname.startsWith("/api/resubscribe") ||
-    // 이메일 내 로컬 이미지(hosted 모드) — 메일 클라이언트가 세션 없이 로드해야 함.
+    // Local images inside emails (hosted mode) — mail clients must load them without a session.
     pathname.startsWith("/api/assets/") ||
     pathname === "/api/health" ||
     pathname.startsWith("/_next") ||
@@ -32,8 +32,8 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // _next 정적, favicon, public/ 의 흔한 정적 자산은 인증 검사를 건너뛴다.
-  // robots.txt, OG 이미지 등을 public/ 에 두면 크롤러·SNS 카드 미리보기가 가능해야 한다.
+  // Skip auth checks for _next static, favicon, and common static assets in public/.
+  // robots.txt, OG images, etc. placed in public/ must be accessible to crawlers/SNS card previews.
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|icon|apple-icon|.*\\.(?:png|jpg|jpeg|gif|webp|svg|ico|css|js|woff2?|ttf|txt|xml|map)$).*)",
   ],

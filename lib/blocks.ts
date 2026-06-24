@@ -1,26 +1,26 @@
 /**
- * 블록 컴포저 — 평면 블록 spec(JSON) → 디자인 시스템 고정 이메일 HTML 렌더러.
+ * Block composer — flat block spec (JSON) → design-system-fixed email HTML renderer.
  *
- * 모델: 메일 본문은 Block[] 의 평면 리스트(컨테이너 중첩 없음).
- *  - 각 블록의 스타일은 "위치 기반 자동값"을 기본으로 하고, 토큰(align/size/weight/font/color/gap)으로 override.
- *  - 토큰은 모두 한정된 선택지(자유 px·임의 hex 없음) → 비개발자도 항상 온브랜드.
- *  - 블록별 선택 구성요소(부제/코멘트/제목 등)는 해당 필드가 존재할 때만 렌더.
- *  - grid 블록: cols(2|3) × cardType(feature|image|stat|cta) 카드 묶음.
+ * Model: the email body is a flat list of Block[] (no nested containers).
+ *  - Each block's style defaults to a "position-based automatic value", overridable via tokens (align/size/weight/font/color/gap).
+ *  - All tokens are a limited set of choices (no free px / arbitrary hex) → always on-brand even for non-developers.
+ *  - Per-block optional parts (subnote/comment/title etc.) render only when the field is present.
+ *  - grid block: cols(2|3) × cardType(feature|image|stat|cta) card group.
  *
- * 본문 텍스트의 {{name}}/{{email}} 는 발송 시 수신자별 치환(fillPlaceholders).
- * 푸터의 %%UNSUB_URL%% 는 발송 시 수신자별 서명 수신거부 URL 로 치환.
- * 본문(text)의 부분 서식(html)은 sanitizeInline 으로 허용 태그만 통과(굵게/브랜드색).
- * Outlook 호환: rgba() 미사용(흰 배경 합성 hex).
+ * Body text's {{name}}/{{email}} is substituted per recipient at send time (fillPlaceholders).
+ * The footer's %%UNSUB_URL%% is replaced with a per-recipient signed unsubscribe URL at send time.
+ * Inline formatting (html) in body text passes through sanitizeInline, allowing only whitelisted tags (bold/brand color).
+ * Outlook compatibility: no rgba() (hex composited over white background).
  */
 import { SENDER_ORG_NAME, SENDER_POSTAL_ADDRESS } from "./config";
 import { brand } from "../brand.config";
 import { UNSUB_PLACEHOLDER, fillPlaceholders } from "./personalize";
 
-// 개인화 치환은 lib/personalize.ts 로 분리(클라이언트 공용) — 기존 import 호환 re-export.
+// Personalization substitution is split out into lib/personalize.ts (shared with client) — re-exported for existing import compatibility.
 export { UNSUB_PLACEHOLDER, fillPlaceholders, fillSubject, usesPersonalization, hasBlankNameRisk } from "./personalize";
 export type { PersonalizeVars } from "./personalize";
 
-// ── Design tokens (brand.config.ts 의 email.colors 에서 주입 — 디자인 시스템 고정) ──
+// ── Design tokens (injected from brand.config.ts's email.colors — design system fixed) ──
 const C = brand.email.colors;
 const TEAL = C.teal;
 const MINT = C.mint;
@@ -33,7 +33,7 @@ const CARD_BORDER = C.cardBorder;
 const TEAL_TINT_BG = C.tealTintBg;
 const TEAL_TINT_BORDER = C.tealTintBorder;
 const MONO = brand.email.mono;
-// 이메일 골격 색(페이지 배경·카드) — brand.config.email.surfaces 에서 주입.
+// Email skeleton colors (page background, card) — injected from brand.config.email.surfaces.
 const PAGE_BG = brand.email.surfaces.pageBg;
 const SURFACE = brand.email.surfaces.card;
 const SURFACE_BORDER = brand.email.surfaces.cardBorder;
@@ -46,7 +46,7 @@ const YT_ICON = brand.email.socialIcons.youtube;
 
 const DEFAULT_INQUIRY = brand.email.defaultInquiry;
 
-// ── Block model (평면 리스트) ──
+// ── Block model (flat list) ──
 export type Align = "left" | "center" | "right";
 export type SizeToken = "S" | "M" | "L";
 export type GapToken = "tight" | "sm" | "lg" | "";
@@ -62,14 +62,14 @@ export type GridCard = {
   desc?: string;
   img?: string;   // Azure Blob URL
   value?: string; // stat
-  btn?: string;   // cta 라벨
-  url?: string;   // cta 링크
+  btn?: string;   // cta label
+  url?: string;   // cta link
 };
 
 export type Block = {
   id: string;
   type: BlockType;
-  // 공통 스타일 토큰 (빈 값/미설정 = 자동)
+  // Common style tokens (empty/unset = automatic)
   align?: Align;
   gap?: GapToken;
   size?: SizeToken;
@@ -78,21 +78,21 @@ export type Block = {
   color?: ColorToken;
   // text
   text?: string;
-  html?: string; // 부분 서식(굵게/브랜드색)
+  html?: string; // inline formatting (bold/brand color)
   // heading
   subnote?: string;
-  level?: "title" | "subtitle"; // 레거시 호환
+  level?: "title" | "subtitle"; // legacy compatibility
   // button
   label?: string;
   url?: string;
   topNote?: string;
   bottomNote?: string;
-  arrow?: boolean; // 라벨 뒤 → 표시 여부 (미설정 = true: 기존 저장본 호환. 신규 블록은 emptyBlock 에서 false)
-  btnColor?: "mint" | "teal" | "ink" | ""; // 버튼 배경 토큰 (미설정 = mint)
+  arrow?: boolean; // whether to show → after the label (unset = true: existing saved-version compat. New blocks set false in emptyBlock)
+  btnColor?: "mint" | "teal" | "ink" | ""; // button background token (unset = mint)
   // badge
   line1?: string;
   line2?: string;
-  line2Href?: string; // line2(주소 등)에 걸 링크(http/https/mailto). 없으면 일반 텍스트.
+  line2Href?: string; // link (http/https/mailto) on line2 (address etc.). Plain text if absent.
   // numbered / agenda
   title?: string;
   titleNote?: string;
@@ -102,8 +102,8 @@ export type Block = {
   alt?: string;
   caption?: string;
   width?: number;
-  href?: string; // 이미지 클릭 시 이동할 링크(http/https/mailto). 없으면 클릭 불가.
-  fullBleed?: boolean; // 양옆 40px 여백 제거 → 카드 폭 꽉 채움(배너용).
+  href?: string; // link (http/https/mailto) to navigate to on image click. Not clickable if absent.
+  fullBleed?: boolean; // remove the 40px side padding → fill full card width (for banners).
   // grid
   cols?: number;
   cardType?: CardType;
@@ -114,7 +114,7 @@ export type Block = {
 export type TemplateSpec = {
   subject: string;
   preheader?: string;
-  /** 본문 너비. 기본 600px(이메일 표준) / wide 680px(Gmail·Outlook 안전 상한). */
+  /** Body width. Default 600px (email standard) / wide 680px (safe max for Gmail/Outlook). */
   width?: "default" | "wide";
   showLogo: boolean;
   showFooter: boolean;
@@ -122,7 +122,7 @@ export type TemplateSpec = {
   logo?: { url: string; width?: number; alt?: string };
   footer?: {
     inquiryEmail?: string;
-    /** 문의 이메일 줄 표시 여부 (기본 true). false 면 푸터에서 "문의: …" 생략. */
+    /** Whether to show the inquiry email line (default true). If false, omit "문의: …" from the footer. */
     showInquiry?: boolean;
     showSocial?: boolean;
     showUnsubscribe?: boolean;
@@ -132,7 +132,7 @@ export type TemplateSpec = {
   blocks: Block[];
 };
 
-// ── id 생성 (브라우저/Node 공통) ──
+// ── id generation (shared browser/Node) ──
 let _idSeq = 0;
 export function newId(): string {
   try {
@@ -163,7 +163,7 @@ function clampWidth(w: number | undefined, fallback: number): number {
   return Math.min(1200, Math.max(1, Math.round(w)));
 }
 
-// ── 부분 서식 sanitize: 허용 태그만 통과 (실행 코드/임의 스타일 차단) ──
+// ── Inline formatting sanitize: pass only allowed tags (block executable code / arbitrary styles) ──
 const BRAND_HEX = new Set([INK, BODY, TEAL, MUTED].map((h) => h.toLowerCase()));
 function pickBrandColor(tag: string): string {
   const m = tag.match(/color\s*[:=]\s*["']?\s*(#[0-9a-fA-F]{3,6})/);
@@ -171,14 +171,14 @@ function pickBrandColor(tag: string): string {
   const hex = m[1].toLowerCase();
   return BRAND_HEX.has(hex) ? hex : "";
 }
-/** text.html 의 인라인 서식을 화이트리스트(굵게/기울임/줄바꿈/브랜드색 span)로 정규화. */
+/** Normalize text.html inline formatting to a whitelist (bold/italic/line break/brand-color span). */
 export function sanitizeInline(html: string): string {
   let out = "";
   let last = 0;
   const tagRe = /<\/?[a-zA-Z][^>]*>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(html))) {
-    // 태그 이전 텍스트는 escape
+    // escape text before the tag
     out += esc(html.slice(last, m.index));
     last = m.index + m[0].length;
     const tag = m[0];
@@ -197,18 +197,18 @@ export function sanitizeInline(html: string): string {
       const c = pickBrandColor(tag);
       out += c ? `<span style="color:${c}">` : "<span>";
     } else if (lower === "</span>" || lower === "</font>") out += "</span>";
-    // 그 외 태그(div, p, script, …)는 제거
+    // other tags (div, p, script, …) are removed
   }
   out += esc(html.slice(last));
   return out;
 }
 
-// ── 위치 기반 자동 스타일 + 토큰 override ──
+// ── Position-based automatic style + token override ──
 const COLOR_MAP: Record<string, string> = { ink: INK, body: BODY, teal: TEAL, muted: MUTED };
 const HEADING_PX: Record<SizeToken, number> = { S: 16, M: 20, L: 34 };
 const TEXT_PX: Record<SizeToken, number> = { S: 13, M: 14.5, L: 15.5 };
 
-// ── 버튼 색 토큰 (UI 캔버스와 공유 — 캔버스-렌더러 불일치 방지) ──
+// ── Button color tokens (shared with the UI canvas — prevent canvas-renderer mismatch) ──
 export const BUTTON_COLORS: Record<string, { bg: string; fg: string }> = {
   mint: { bg: MINT, fg: INK },
   teal: { bg: TEAL, fg: "#ffffff" },
@@ -229,7 +229,7 @@ export function resolveStyle(b: Block, idx: number): Resolved {
   let weight = "normal";
   let color = b.type === "kicker" ? TEAL : b.type === "heading" ? INK : BODY;
   let font = top ? MONO : "inherit";
-  // 레거시: heading.level
+  // legacy: heading.level
   if (b.type === "heading") {
     if (b.level === "title") size = "L";
     else if (b.level === "subtitle") size = "M";
@@ -242,13 +242,13 @@ export function resolveStyle(b: Block, idx: number): Resolved {
   return { align, size, weight, color, font };
 }
 
-// ── 코멘트(부제) 작은 회색 줄 ──
+// ── Comment (subnote) small gray line ──
 function noteHtml(text: string | undefined, align: Align, margin: string): string {
   if (text === undefined) return "";
   return `<p style="text-align:${align}; color:${MUTED}; font-size:12.5px; line-height:1.6; margin:${margin};">${nl2br(text)}</p>`;
 }
 
-// ── 리프 렌더러 ──
+// ── Leaf renderers ──
 function renderKicker(b: Block, s: Resolved): string {
   if (!b.text?.trim()) return "";
   return `<p style="text-align:${s.align}; color:${s.color}; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin:0;">${esc(b.text)}</p>`;
@@ -270,7 +270,7 @@ function renderText(b: Block, s: Resolved): string {
 function renderBadge(b: Block, s: Resolved): string {
   if (!b.line1?.trim() && !b.line2?.trim()) return "";
   const center = s.align === "center";
-  // 박스 내부 CTA (선택): label 이 있으면 line2 아래에 민트 버튼을 박스 안에 렌더.
+  // In-box CTA (optional): if label is present, render a mint button inside the box below line2.
   const bc = resolveButtonColors(b);
   const innerBtn = b.label?.trim()
     ? `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:14px auto 0;">
@@ -348,7 +348,7 @@ function dividerHtml(): string {
   return `<div style="border-top:1px solid ${HAIR}; height:1px; line-height:1px;">&nbsp;</div>`;
 }
 
-// ── grid 블록 ──
+// ── grid block ──
 function gridCardHtml(b: Block, c: GridCard, align: Align): string {
   const t = b.cardType ?? "feature";
   const pad = "16px";
@@ -386,7 +386,7 @@ function renderGrid(b: Block): string {
   const cols = b.cols === 3 ? 3 : 2;
   const align: Align = b.cardAlign ?? (b.cardType === "stat" ? "center" : b.cardType === "cta" ? "center" : "left");
   const wPct = cols === 3 ? "33.33%" : "50%";
-  // 반응형: 작은 화면에서 1열 stack (지원 클라이언트). 미지원 시 셀 비율 유지.
+  // Responsive: 1-column stack on small screens (supported clients). Keeps cell ratios when unsupported.
   const cells = cards.map((c) =>
     `<td class="eb-col" width="${wPct}" style="width:${wPct}; vertical-align:top; padding:7px;">${gridCardHtml(b, c, align)}</td>`
   );
@@ -399,7 +399,7 @@ function renderGrid(b: Block): string {
   return `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 -7px; border-collapse:separate; border-spacing:0;">${rowsHtml}</table>`;
 }
 
-// ── 블록 → 한 행(<tr><td>) ── (export: UI 캔버스가 동일 간격을 쓰도록)
+// ── Block → one row (<tr><td>) ── (export: so the UI canvas uses the same spacing)
 export const GAP_PX: Record<string, number> = { tight: 2, sm: 7, "": 16, lg: 30 };
 function renderLeafInner(b: Block, idx: number): string {
   if (b.type === "grid") return renderGrid(b);
@@ -447,7 +447,7 @@ function renderFooter(footer?: TemplateSpec["footer"]): string {
   const address = footer?.address?.trim() || SENDER_POSTAL_ADDRESS;
   const year = new Date().getFullYear();
 
-  // 소셜 링크 — brand.email.social 의 URL 이 비어 있으면 해당 아이콘 자동 생략.
+  // Social links — auto-omit an icon if its URL in brand.email.social is empty.
   const socialItems = [
     { href: brand.email.social.x, icon: X_ICON, w: 14, h: 14, alt: "X" },
     { href: brand.email.social.linkedin, icon: LI_ICON, w: 14, h: 14, alt: "LinkedIn" },
@@ -482,12 +482,12 @@ function renderFooter(footer?: TemplateSpec["footer"]): string {
   </td></tr>`;
 }
 
-/** spec.width 토큰 → px. 600 = 이메일 표준, 680 = Gmail 웹/Outlook 읽기창 안전 상한. */
+/** spec.width token → px. 600 = email standard, 680 = safe max for Gmail web / Outlook reading pane. */
 export function specWidthPx(spec: Pick<TemplateSpec, "width">): number {
   return spec.width === "wide" ? 680 : 600;
 }
 
-/** spec → <body> 안에 들어갈 본문 HTML. */
+/** spec → body HTML to place inside <body>. */
 export function renderTemplate(spec: TemplateSpec): string {
   const blocks = (spec.blocks ?? []).filter((b) => b && b.type);
   const rows = blocks.map((b, i) => renderBlockRow(b, i)).filter((h) => h.trim()).join("\n");
@@ -503,7 +503,7 @@ export function renderTemplate(spec: TemplateSpec): string {
       </td></tr>`
     : "";
 
-  // 반응형 그리드용 미디어쿼리(지원 클라이언트 한정). 미지원 시 인라인 스타일로 폴백.
+  // Media query for the responsive grid (supported clients only). Falls back to inline styles when unsupported.
   const responsive = `<style>@media screen and (max-width:480px){.eb-col{display:block!important;width:100%!important}}</style>`;
 
   return `${responsive}<div style="margin:0; padding:0; background-color:${PAGE_BG};">
@@ -520,12 +520,12 @@ export function renderTemplate(spec: TemplateSpec): string {
 </div>`;
 }
 
-// ── 미리보기용 샘플 치환 (실제 치환 로직은 lib/personalize.ts) ──
+// ── Sample substitution for preview (actual substitution logic is in lib/personalize.ts) ──
 export function previewFill(html: string): string {
   return fillPlaceholders(html, { name: "홍길동", email: `sample@${brand.auth.senderDomain}`, unsubscribeUrl: "#" });
 }
 
-// ── 레거시(컨테이너 트리) spec → 평면 모델 마이그레이션 ──
+// ── Legacy (container tree) spec → flat model migration ──
 const NEW_LEAF = new Set<string>(["heading", "text", "button", "badge", "kicker", "numbered", "agenda", "grid", "image", "divider"]);
 export function migrateSpec(spec: any): TemplateSpec {
   if (!spec || typeof spec !== "object") return spec;
@@ -535,14 +535,14 @@ export function migrateSpec(spec: any): TemplateSpec {
 }
 function flattenBlock(b: any, out: Block[]): void {
   if (!b || typeof b !== "object") return;
-  // 이미 평면 신모델
+  // already the flat new model
   if (b.id && NEW_LEAF.has(b.type)) { out.push(b as Block); return; }
-  // 컨테이너 트리(구버전): children 펼치기
+  // container tree (old version): flatten children
   if (b.type === "container" && Array.isArray(b.children)) {
     for (const c of b.children) flattenBlock(c, out);
     return;
   }
-  // 아주 옛 플랫 포맷(hero/section/cta/numbered/agenda/image/divider)
+  // very old flat format (hero/section/cta/numbered/agenda/image/divider)
   const id = b.id || newId();
   switch (b.type) {
     case "hero": {
@@ -587,7 +587,7 @@ function flattenBlock(b: any, out: Block[]): void {
   }
 }
 
-// ── 팔레트 (UI용) ──
+// ── Palette (for UI) ──
 export const BLOCK_PALETTE: { type: BlockType; label: string; hint: string }[] = [
   { type: "heading", label: "제목", hint: "대제목/소제목" },
   { type: "text", label: "본문", hint: "문단 텍스트 (드래그로 부분 강조)" },
@@ -606,7 +606,7 @@ export function emptyBlock(type: BlockType): Block {
   switch (type) {
     case "heading": return { id, type, text: "" };
     case "text": return { id, type, html: "" };
-    // 신규 버튼/배지는 화살표 기본 off (미설정=true 는 기존 저장본 호환용으로만 유지).
+    // New buttons/badges default arrow off (unset=true kept only for existing saved-version compat).
     case "button": return { id, type, label: "", url: "", arrow: false };
     case "badge": return { id, type, line1: "", line2: "", arrow: false };
     case "kicker": return { id, type, text: "" };

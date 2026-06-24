@@ -6,8 +6,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET — 기본은 summary 만. `?with=members&slugs=a,b,c` 면 지정 슬러그들의 멤버를 함께 반환
- * (SendForm 의 N+1 fetch 제거용 batch 엔드포인트).
+ * GET — by default returns summary only. With `?with=members&slugs=a,b,c`, also returns the members of the given slugs
+ * (a batch endpoint to eliminate SendForm's N+1 fetch).
  */
 export async function GET(req: NextRequest) {
   const withMembers = req.nextUrl.searchParams.get("with") === "members";

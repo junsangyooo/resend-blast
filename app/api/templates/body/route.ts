@@ -4,7 +4,7 @@ import { getTemplateBody, listTemplates } from "@/lib/templates";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// HTML 직접 입력 템플릿의 raw body + meta(subject/description) 를 편집기에 로드한다.
+// Load the raw body + meta (subject/description) of a directly-entered-HTML template into the editor.
 export async function GET(req: NextRequest) {
   const name = req.nextUrl.searchParams.get("name");
   if (!name) return NextResponse.json({ error: "name 없음" }, { status: 400 });

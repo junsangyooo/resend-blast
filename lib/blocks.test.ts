@@ -149,7 +149,7 @@ describe("sanitizeInline (partial formatting)", () => {
     expect(out).not.toContain("<script");
     expect(out).toContain(`color:${TEAL}`);
     expect(out).not.toContain("#ff0000");
-    expect(out).toContain("빨강"); // 텍스트는 유지, 비브랜드 색만 무시
+    expect(out).toContain("빨강"); // text is kept, only the non-brand color is ignored
   });
   it("escapes raw text content", () => {
     expect(sanitizeInline("a < b & c")).toContain("&lt; b &amp;");

@@ -6,8 +6,8 @@ import { isAdminAsync } from "@/lib/admins";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 발신자 레지스트리 — 공용(shared)은 관리자만, 개인(personal)은 본인 주소 닉네임만.
- *  ?all=1 (관리자 전용): personal 포함 전체 — 레거시/타인 personal 항목 정리용. */
+/** Sender registry — shared senders are admin-only, personal ones are nicknames for one's own address only.
+ *  ?all=1 (admin-only): everything including personal — for cleaning up legacy/other people's personal entries. */
 export async function GET(req: NextRequest) {
   try {
     const email = await requireUserEmail();

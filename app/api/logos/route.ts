@@ -5,12 +5,12 @@ import { uploadImage, isAllowedImageType, MAX_UPLOAD_BYTES } from "@/lib/storage
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 헤더 로고 목록
+// Header logo list
 export async function GET() {
   return NextResponse.json({ logos: await listLogos() });
 }
 
-// 로고 업로드: Azure 업로드 → data/logos.json 에 등록
+// Logo upload: upload to Azure → register in data/logos.json
 export async function POST(req: NextRequest) {
   try {
     const form = await req.formData();
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// 커스텀 로고 삭제 (내장 로고는 lib/logos.ts 에서 보호)
+// Delete custom logo (built-in logos are protected in lib/logos.ts)
 export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "id 없음" }, { status: 400 });

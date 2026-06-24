@@ -4,7 +4,7 @@ import { buildAuthUrl, OAUTH_STATE_COOKIE, originFromRequest } from "@/lib/googl
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 구글 인증 화면으로 redirect. state(nonce) + next 를 쿠키에 저장.
+// Redirect to the Google auth screen. Store state(nonce) + next in a cookie.
 export async function GET(req: NextRequest) {
   const next = req.nextUrl.searchParams.get("next") || "/";
   const nonce = crypto.randomUUID();
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 600, // 10분
+    maxAge: 600, // 10 minutes
     path: "/",
   });
   return res;

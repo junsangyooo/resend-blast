@@ -1,6 +1,6 @@
 /**
- * 라우트 핸들러용 세션 헬퍼.
- * 미들웨어가 이미 401을 막아주지만, 생성자/감사 로그 등 사용자 ID가 필요할 때 사용.
+ * Session helpers for route handlers.
+ * Middleware already blocks 401s, but use these when a user ID is needed (e.g., creator/audit logs).
  */
 import { cookies } from "next/headers";
 import { verifySession, SESSION_COOKIE } from "./session";

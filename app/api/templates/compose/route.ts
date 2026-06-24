@@ -5,7 +5,7 @@ import { requireUserEmail } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// 블록 조립기 결과 저장: {name}.json + {name}.html + _meta.json
+// Save block composer result: {name}.json + {name}.html + _meta.json
 export async function POST(req: NextRequest) {
   try {
     const actor = await requireUserEmail();

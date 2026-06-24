@@ -17,9 +17,9 @@ describe("inlineLocalImages (CID attach)", () => {
       `<img src="https://cdn.other.com/logo.png">`;
     const { html: out, attachments } = await inlineLocalImages(html);
 
-    // 로컬 이미지 → cid:
+    // local image → cid:
     expect(out).toContain(`src="cid:img-${FILE}"`);
-    // 외부 CDN 이미지는 그대로 hosted
+    // external CDN images stay hosted
     expect(out).toContain("https://cdn.other.com/logo.png");
 
     expect(attachments).toHaveLength(1);

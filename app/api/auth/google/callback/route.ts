@@ -24,10 +24,10 @@ export async function GET(req: NextRequest) {
     const redirectUri = `${originFromRequest(req)}/api/auth/google/callback`;
     const info = await exchangeCode(code, redirectUri);
     const email = verifyDomain(info);
-    if (!email) return fail(req, "domain"); // @rlwrld.ai 아님
+    if (!email) return fail(req, "domain"); // not @rlwrld.ai
 
     const token = await createSession(email);
-    // open-redirect 방지: 단일 슬래시 + 비-슬래시 시작인 경로만 허용 ( "//evil.com" 차단 )
+    // Prevent open redirect: only allow paths starting with a single non-slash slash ( blocks "//evil.com" )
     const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
     const dest = new URL(safeNext, originFromRequest(req));
 

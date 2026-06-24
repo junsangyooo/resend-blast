@@ -32,7 +32,7 @@ export default function HomePage() {
   function followup(p: FollowupPayload) {
     const n = prefillNonce + 1;
     setPrefillNonce(n);
-    // 이름 보존: "홍길동 <a@b.com>" 형식으로 채워 parseRecipientGrid 가 이름까지 매핑.
+    // Preserve names: fill in "홍길동 <a@b.com>" format so parseRecipientGrid maps names too.
     const adhoc = p.recipients
       .map((r) => (r.name?.trim() ? `${r.name.trim()} <${r.email}>` : r.email))
       .join("\n");

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-/** 모달 ESC 닫기 — 활성일 때 Escape 키로 onClose 호출. */
+/** Modal ESC close — calls onClose on the Escape key when active. */
 export function useEscClose(active: boolean, onClose: () => void) {
   useEffect(() => {
     if (!active) return;

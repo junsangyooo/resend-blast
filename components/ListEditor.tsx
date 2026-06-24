@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import RecipientInput from "./RecipientInput";
 import { type Recipient } from "@/lib/recipients";
 
-/** base 에 extra 를 이메일 기준 dedupe 병합 (base 우선, 첫 이름 보존). */
+/** Merge extra into base, deduped by email (base wins, first name preserved). */
 function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
   const seen = new Set(base.map((m) => m.email.toLowerCase()));
   const out = [...base];
@@ -16,8 +16,8 @@ function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
 }
 
 /**
- * 리스트 생성/편집 모달. ListManager(관리 화면)와 SendForm(인라인 빠른 추가) 양쪽에서 재사용.
- * 멤버 입력은 RecipientInput(그리드 붙여넣기 + CSV) 으로 통일.
+ * List create/edit modal. Reused by both ListManager (management screen) and SendForm (inline quick add).
+ * Member input is unified through RecipientInput (grid paste + CSV).
  */
 export default function ListEditor({
   slug,
@@ -26,7 +26,7 @@ export default function ListEditor({
   onClose,
   onSaved,
 }: {
-  slug: string | null; // null = 신규 생성
+  slug: string | null; // null = new creation
   me: string | null;
   isAdmin?: boolean;
   onClose: () => void;
@@ -35,14 +35,14 @@ export default function ListEditor({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [members, setMembers] = useState<Recipient[]>([]);
-  const [pendingRows, setPendingRows] = useState<Recipient[]>([]); // 붙여넣었지만 아직 "추가" 안 한 행
+  const [pendingRows, setPendingRows] = useState<Recipient[]>([]); // rows pasted but not yet "added"
   const [createdBy, setCreatedBy] = useState<string>("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
-  // 멤버 이름 인라인 편집
+  // inline member name editing
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
@@ -62,7 +62,7 @@ export default function ListEditor({
       .finally(() => setLoaded(true));
   }, [slug]);
 
-  // 신규 생성은 누구나, 기존 리스트 수정/삭제는 생성자 또는 관리자만 (서버 canManage 와 일치).
+  // anyone can create new; editing/deleting an existing list is creator or admin only (matches server canManage).
   const canManageList = !slug || (!!me && (me.toLowerCase() === createdBy.toLowerCase() || isAdmin));
   const canDelete = !!slug && canManageList;
   const readOnly = !!slug && !canManageList;
@@ -71,8 +71,8 @@ export default function ListEditor({
     setMembers((cur) => mergeMembers(cur, rows));
   }
 
-  // 저장에 실제로 들어갈 최종 멤버 = 확정 멤버 + 미확정(붙여넣기 대기) 행.
-  // "추가" 버튼을 안 눌러도 빈 리스트로 저장되지 않게 한다.
+  // final members actually saved = confirmed members + unconfirmed (pending paste) rows.
+  // prevents saving an empty list even if the "Add" button wasn't pressed.
   const finalMembers = useMemo(() => mergeMembers(members, pendingRows), [members, pendingRows]);
   const pendingExtra = finalMembers.length - members.length;
 

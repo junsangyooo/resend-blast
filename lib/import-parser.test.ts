@@ -26,7 +26,7 @@ describe("analyzeGrid header detection", () => {
     const r = buildRecipients(a);
     expect(r.rows).toEqual([
       { email: "a@b.com", name: "Jane Doe" },
-      { email: "b@c.com", name: "김민준" }, // 한글은 성+이름 공백 없이
+      { email: "b@c.com", name: "김민준" }, // Korean: surname+given without a space
     ]);
   });
 
@@ -53,7 +53,7 @@ describe("analyzeGrid header detection", () => {
       ["홍길동", "h@r.ai"],
     ], meta);
     expect(a.hasHeader).toBe(true);
-    // 이메일 컬럼은 내용 기반 추론, 2열이라 나머지는 이름
+    // email column inferred by content; with 2 columns the rest is the name
     expect(a.roles[1]).toBe("email");
     expect(a.roles[0]).toBe("name");
   });

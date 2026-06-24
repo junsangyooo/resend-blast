@@ -1,9 +1,9 @@
 /**
- * Azure Blob 스토리지 어댑터.
+ * Azure Blob storage adapter.
  *
- * 이미지를 로고와 동일 컨테이너에 올리고 공개 URL을 반환한다.
- * 자격증명(account/key/container)은 .env.local 에서만 읽는다 — brand.config 가 아님.
- * 경로: {container}/assets/email-blast/{uuid}.{ext}
+ * Uploads images to the same container as logos and returns a public URL.
+ * Credentials (account/key/container) are read only from .env.local — not brand.config.
+ * Path: {container}/assets/email-blast/{uuid}.{ext}
  */
 import { BlobServiceClient, StorageSharedKeyCredential } from "@azure/storage-blob";
 import { randomUUID } from "crypto";

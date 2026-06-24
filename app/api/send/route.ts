@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 
 const MAX_RETRIES = 1;
 const RETRY_BASE_MS = 1000;
-const DEDUPE_WINDOW_MS = 90_000; // 90초 내 동일 내용 재발송은 중복으로 차단(더블클릭/재시도)
+const DEDUPE_WINDOW_MS = 90_000; // Block re-sending identical content within 90s as a duplicate (double-click/retry)
 
 type SendBody = {
   template: string;
@@ -32,12 +32,12 @@ type SendBody = {
   from?: string;
   replyTo?: string;
   isAd?: boolean;
-  /** 본인 검수용 테스트 발송 — 현재 로그인 사용자에게만 1건. */
+  /** Test send for self-review — a single message to the current logged-in user only. */
   testToSelf?: boolean;
-  /** 팔로업(재발송): 원본 send id + 필터로 대상 자동 산출. */
+  /** Follow-up (re-send): derive targets automatically from source send id + filter. */
   sourceSendId?: string;
   followupFilter?: "failed" | "unopened";
-  /** 멱등성 중복 차단을 무시하고 강제 발송. */
+  /** Force-send, ignoring idempotency duplicate blocking. */
   force?: boolean;
 };
 
@@ -60,18 +60,18 @@ export async function POST(req: NextRequest) {
   const isTest = !!body.testToSelf;
   const isFollowup = !isTest && !!body.sourceSendId && !!body.followupFilter;
 
-  // 템플릿 푸터의 수신거부 링크 포함 여부(토글). 포함된 경우에만 본문 링크/헤더를 주입한다.
-  // (강제하지 않음 — 포함 여부는 템플릿 생성 시 운영자가 선택.)
+  // Whether the template footer includes an unsubscribe link (toggle). Inject the body link/header only when present.
+  // (Not enforced — inclusion is chosen by the operator at template creation time.)
   const hasUnsub = built.html.includes(UNSUB_PLACEHOLDER);
 
-  // 광고성 메일은 본문에 수신거부 방법 표시가 법적 의무(정보통신망법 §50). 헤더만으론 불충분.
+  // Advertising mail is legally required to show an unsubscribe method in the body (Network Act §50). The header alone is insufficient.
   if (!isTest && !!body.isAd && !hasUnsub) {
     return json({
       error: "광고성((광고)) 메일은 본문에 수신거부 링크가 있어야 합니다. 블록 이메일 푸터의 ‘수신거부 링크’를 켜거나, HTML 본문에 %%UNSUB_URL%% 를 포함한 뒤 다시 발송하세요.",
     }, 400);
   }
 
-  // ── 1) 수신자 산출 ──
+  // ── 1) Resolve recipients ──
   let merged: Recipient[];
   const memberOrigin = new Map<string, string | null>();
   let adhocParsed = { valid: [] as string[], invalid: [] as string[], duplicates: [] as string[] };
@@ -86,8 +86,8 @@ export async function POST(req: NextRequest) {
     if (!src) return json({ error: "원본 발송 기록 없음" }, 400);
     const pick = (r: SendRecipient): boolean => {
       if (body.followupFilter === "failed") return r.status === "failed";
-      // 리마인더: 전달(Delivered) 확인이 안 된 수신자만 — opened/clicked 추적이 불안정해
-      // 열람 기준 대신 전달 기준. 반송/신고는 어차피 suppression 으로 자동 제외.
+      // Reminder: only recipients whose delivery (Delivered) is unconfirmed — opened/clicked tracking is unreliable,
+      // so use delivery as the criterion instead of opens. Bounces/complaints are auto-excluded via suppression anyway.
       const ls = (r.liveStatus ?? "").toLowerCase();
       return r.status === "sent" && !["delivered", "opened", "clicked", "bounced", "complained"].includes(ls);
     };
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   } else {
     listSlugs = Array.isArray(body.listSlugs) ? body.listSlugs.filter((s) => typeof s === "string") : [];
     const fromLists = await resolveListMembersWithOrigin(listSlugs);
-    // 그리드 파서로 ad-hoc 처리 — 이름+이메일 매핑 보존 (탭/파이프/쉼표/「이름 <이메일>」).
+    // Handle ad-hoc with the grid parser — preserve name+email mapping (tab/pipe/comma/「name <email>」).
     const grid = parseRecipientGrid(String(body.adhoc ?? ""));
     const adhocItems: Recipient[] = grid.rows;
     adhocParsed = { valid: grid.rows.map((r) => r.email), invalid: grid.ignored.map((g) => g.line), duplicates: grid.duplicates };
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
 
   if (merged.length === 0) return json({ error: "유효한 수신자 없음" }, 400);
 
-  // ── 2) 억제목록(수신거부/반송/스팸신고) 제외 — 테스트 발송은 제외하지 않음 ──
+  // ── 2) Exclude suppression list (unsubscribe/bounce/spam complaint) — not applied to test sends ──
   let excludedSuppressed = 0;
   if (!isTest) {
     const supp = await suppressedSet(merged.map((r) => r.email));
@@ -125,13 +125,13 @@ export async function POST(req: NextRequest) {
     if (merged.length === 0) return json({ error: "모든 수신자가 수신거부/반송 처리되어 발송 대상이 없습니다", excludedSuppressed }, 400);
   }
 
-  // ── 3) 수신자 수 상한 ──
+  // ── 3) Recipient count cap ──
   if (!isTest && merged.length > MAX_RECIPIENTS_PER_SEND) {
     return json({ error: `1회 발송 최대 ${MAX_RECIPIENTS_PER_SEND}명을 초과했습니다 (${merged.length}명). 리스트를 나눠 보내세요.` }, 400);
   }
 
-  // ── 4) From / reply-to 검증 — 미등록 발신자는 조용한 폴백 없이 거부 ──
-  // (의도와 다른 발신자(launch@)로 발송되는 운영 사고 방지. 빈 값만 기본 발신자.)
+  // ── 4) From / reply-to validation — reject unregistered senders with no silent fallback ──
+  // (Prevents the operational accident of sending from an unintended sender (launch@). Only an empty value uses the default sender.)
   const finalFrom = String(body.from ?? "").trim() || FROM_DEFAULT;
   if (!isFromAllowed(finalFrom)) return json({ error: "허용되지 않은 발신자 도메인입니다" }, 400);
   if (!(await isSenderAllowedFor(finalFrom, sentBy))) {
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
   }
   const replyTo = resolveReplyTo(body.replyTo);
 
-  // ── 5) 사용자 발송 레이트리밋 (테스트 제외) ──
+  // ── 5) Per-user send rate limit (excluding tests) ──
   if (!isTest) {
     const [hourVol, dayVol] = await Promise.all([
       userSendVolume(sentBy, 60 * 60 * 1000),
@@ -153,11 +153,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 6) 제목: 광고성이면 (광고) 접두 ──
+  // ── 6) Subject: prefix with (광고) if advertising ──
   const baseSubject = built.subject;
   const subject = body.isAd && !/^\(광고\)/.test(baseSubject) ? `(광고) ${baseSubject}` : baseSubject;
 
-  // ── 7) 멱등성: 90초 내 동일 내용 재발송 차단 (테스트 제외) ──
+  // ── 7) Idempotency: block re-sending identical content within 90s (excluding tests) ──
   const hash = contentHash({ sentBy, from: finalFrom, templateName: String(body.template), subject, emails: merged.map((r) => r.email) });
   if (!isTest && !body.force) {
     const dup = await findRecentSendByHash(hash, DEDUPE_WINDOW_MS);
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
   if (!sendKey) return json({ error: "RESEND_EMAIL_TRACKING_API_KEY 없음" }, 500);
   const resend = new Resend(sendKey);
 
-  // ── 8) send 레코드 생성 (running) ──
+  // ── 8) Create send record (running) ──
   const sendId = newSendId();
   const record: SendRecord = {
     id: sendId,
@@ -200,10 +200,10 @@ export async function POST(req: NextRequest) {
 
   const mailtoUnsub = unsubscribeMailto();
 
-  // ── 이미지 전달 방식 (brand.config.assets.delivery) ──
-  // "attach": 본문의 로컬 이미지를 CID 인라인 첨부로 1회 변환 → 모든 수신자에 재사용
-  //           (이미지는 수신자 무관이라 base64 를 한 번만 읽는다). 외부 호스팅 불필요.
-  // "hosted": 변환 없이 이미지 URL 그대로(메일 클라이언트가 외부에서 로드).
+  // ── Image delivery method (brand.config.assets.delivery) ──
+  // "attach": convert local images in the body to CID inline attachments once → reuse for all recipients
+  //           (images are recipient-independent, so base64 is read just once). No external hosting needed.
+  // "hosted": use the image URLs as-is without conversion (the mail client loads them externally).
   let sendHtml = built.html;
   let inlineAttachments: InlineImageAttachment[] | undefined;
   if (brand.assets.delivery === "attach") {
@@ -235,18 +235,18 @@ export async function POST(req: NextRequest) {
 
       let ok = 0, fail = 0, aborted = false;
       for (let i = 0; i < merged.length; i++) {
-        // 중단 요청 확인 — UI 의 '발송 중단' 버튼이 레코드 abortRequested 를 세팅하면 다음 반복에서 종료.
+        // Check for an abort request — when the UI's 'Stop sending' button sets the record's abortRequested, exit on the next iteration.
         if (!isTest) {
           const cur = await getSend(sendId).catch(() => null);
           if (cur?.abortRequested) { aborted = true; break; }
         }
 
-        // 전역 스로틀: 동시 발송 스트림 간에도 Resend 한도(초당 5건)를 넘지 않게 간격 유지.
+        // Global throttle: keep an interval so the Resend limit (5/sec) is not exceeded even across concurrent send streams.
         await globalThrottle(SEND_MIN_GAP_MS);
 
         const rec = merged[i];
         const to = rec.email;
-        // 발송 중 수신거부/반송된 주소는 건너뛴다(장시간 블라스트 도중 원클릭 수신거부 대비).
+        // Skip addresses that unsubscribed/bounced mid-send (guards against one-click unsubscribe during a long blast).
         if (!isTest && (await isSuppressed(to))) {
           fail++;
           await updateSend(sendId, (r) => ({
@@ -257,9 +257,9 @@ export async function POST(req: NextRequest) {
           send({ type: "fail", to, error: "발송 중 수신거부되어 제외", i: i + 1, total: merged.length });
           continue;
         }
-        // 본문 수신거부 링크: 템플릿이 포함한 경우에만(토글 존중).
-        // List-Unsubscribe 헤더: 본문 링크가 있거나 광고성 발송이면 부착 — 발송을 막지 않으면서
-        // 광고 메일의 Gmail/Yahoo 원클릭 수신거부(보이지 않는 헤더)는 항상 동작하도록 보장.
+        // Body unsubscribe link: only when the template includes it (respect the toggle).
+        // List-Unsubscribe header: attach if there's a body link or it's an advertising send — without blocking the send,
+        // ensure Gmail/Yahoo one-click unsubscribe (the invisible header) always works for advertising mail.
         const includeUnsubHeader = !isTest && (hasUnsub || !!body.isAd);
         const unsubUrl = includeUnsubHeader ? unsubscribeUrl(to, sendId) : "#";
         const html = fillPlaceholders(sendHtml, {
@@ -267,7 +267,7 @@ export async function POST(req: NextRequest) {
           email: to,
           unsubscribeUrl: hasUnsub && !isTest ? unsubUrl : "#",
         });
-        // 제목도 수신자별 개인화 치환(평문 — escape 없음).
+        // The subject is also personalized per recipient (plain text — no escaping).
         const recipientSubject = fillSubject(subject, { name: rec.name, email: to });
         const headers = includeUnsubHeader ? {
           "List-Unsubscribe": `<${unsubUrl}>, <${mailtoUnsub}>`,
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
         while (attempt <= MAX_RETRIES && !success) {
           try {
             const { data, error } = await resend.emails.send({
-              // replyTo 가 비어있으면 헤더 미부착 → 수신자 회신이 From 주소로 감.
+              // If replyTo is empty, no header is attached → recipient replies go to the From address.
               from: finalFrom, to, ...(replyTo ? { replyTo } : {}), subject: recipientSubject, html, headers,
               ...(inlineAttachments ? { attachments: inlineAttachments } : {}),
             });

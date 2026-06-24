@@ -1,8 +1,8 @@
 /**
- * 발송 로그 — per-send 파일.
- * 저장: data/sends/{id}.json
- * 동시 발송 충돌 없음 (파일이 발송마다 새로 생성).
- * 발송 중에는 partial 로 기록 → 완료 시 final 로 갱신.
+ * Send log — per-send file.
+ * Storage: data/sends/{id}.json
+ * No concurrent-send collisions (a fresh file is created per send).
+ * Recorded as partial during sending → updated to final on completion.
  */
 import fs from "fs/promises";
 import path from "path";
@@ -25,7 +25,7 @@ export type SendRecipient = {
   status: "pending" | "sent" | "failed";
   error?: string;
   sentAt?: string;
-  /** Resend 라이브 상태(delivered/opened/clicked/bounced/complained…). webhook 또는 조회로 영속. */
+  /** Resend live status (delivered/opened/clicked/bounced/complained…). Persisted via webhook or lookup. */
   liveStatus?: string;
   liveStatusAt?: string;
 };
@@ -44,21 +44,21 @@ export type SendRecord = {
   adhocCount: number;
   recipients: SendRecipient[];
   summary: { total: number; sent: number; failed: number };
-  /** 내용 지문 — 중복 발송(멱등성) 검사용. */
+  /** Content fingerprint — for duplicate-send (idempotency) checks. */
   hash?: string;
-  /** 발송 중 중단 요청 플래그 — 발송 루프가 매 반복 확인. */
+  /** Abort-request flag during sending — checked by the send loop every iteration. */
   abortRequested?: boolean;
-  /** 광고성 발송 여부((광고) 제목 접두 + 수신거부 강제). */
+  /** Whether it's a promotional send ((광고) subject prefix + forced unsubscribe). */
   isAd?: boolean;
-  /** 발송 종류. test 는 본인 검수용, followup 은 재발송. */
+  /** Send kind. test is for self-review, followup is a resend. */
   kind?: "normal" | "test" | "followup";
-  /** 팔로업(재발송) 시 원본 send id. */
+  /** Original send id for a followup (resend). */
   sourceSendId?: string;
-  /** 억제목록으로 제외된 수신자 수. */
+  /** Number of recipients excluded by the suppression list. */
   excludedSuppressed?: number;
 };
 
-/** 수신자 1명의 현재 단계(상호 배타). liveStatus 우선, 없으면 send status. */
+/** Current stage of one recipient (mutually exclusive). liveStatus takes priority, else send status. */
 export type StatusStage = "delivered" | "sent" | "bounced" | "failed" | "pending";
 export function recipientStage(r: Pick<SendRecipient, "status" | "liveStatus">): StatusStage {
   if (r.status === "failed") return "failed";
@@ -66,7 +66,7 @@ export function recipientStage(r: Pick<SendRecipient, "status" | "liveStatus">):
   const ls = (r.liveStatus ?? "").toLowerCase();
   if (ls === "bounced" || ls === "complained") return "bounced";
   if (ls === "delivered" || ls === "opened" || ls === "clicked") return "delivered";
-  return "sent"; // 전송됐으나 아직 전달 확인 전
+  return "sent"; // sent but delivery not yet confirmed
 }
 export type StatusBreakdown = { delivered: number; sent: number; bounced: number; failed: number; pending: number };
 export function statusBreakdown(recipients: SendRecipient[]): StatusBreakdown {
@@ -78,7 +78,7 @@ export function statusBreakdown(recipients: SendRecipient[]): StatusBreakdown {
 export type SendSummary = Omit<SendRecord, "recipients"> & { recipientCount: number; statusBreakdown: StatusBreakdown };
 
 export function newSendId(): string {
-  // ISO timestamp + 6char nanoid → 시간순 정렬 + 고유
+  // ISO timestamp + 6-char nanoid → chronological sort + uniqueness
   const ts = new Date().toISOString().replace(/[:.]/g, "-");
   return `${ts}_${idGen()}`;
 }
@@ -132,10 +132,10 @@ export async function listSends(): Promise<SendSummary[]> {
 }
 
 /**
- * 발송 중 서버가 죽거나 deploy 재시작이 끼어들면 `running` 상태로 영원히 갇히는 레코드가 생긴다.
- * running 레코드를 aborted 로 마킹하되, cutoff 를 **수신자 수에 비례해 동적**으로 잡아
- * 대량 발송이 1시간을 넘겨도 진행 중인 진짜 발송을 오마킹하지 않는다.
- * 예) 5000명 × 220ms ≈ 18.3분 → cutoff = 그 2배 + 30분 마진.
+ * If the server dies mid-send or a deploy restart cuts in, records get stuck in `running` forever.
+ * Mark such running records as aborted, but set the cutoff **dynamically in proportion to recipient count**
+ * so a bulk send that runs past 1 hour isn't mis-marked while a real send is still in progress.
+ * e.g. 5000 recipients × 220ms ≈ 18.3 min → cutoff = 2× that + 30 min margin.
  */
 export async function cleanupStaleSends(minAgeMs = 60 * 60 * 1000): Promise<number> {
   await ensureDir();
@@ -149,20 +149,20 @@ export async function cleanupStaleSends(minAgeMs = 60 * 60 * 1000): Promise<numb
     const data = await readJsonSafe<SendRecord | null>(path.join(SENDS_DIR, f), null);
     if (!data) continue;
     if (data.status !== "running") continue;
-    if (data.finishedAt) continue; // 이미 끝남 (status만 누락)
+    if (data.finishedAt) continue; // already finished (only status missing)
     const created = new Date(data.createdAt).getTime();
     if (!Number.isFinite(created)) continue;
-    // 최근까지 진행 흔적이 있으면(마지막 sentAt 이 10분 이내) 진짜 살아있는 발송 → 건드리지 않는다.
-    // (느린/재시도/경합 발송이 추정시간을 넘겨도 오판해 aborted 로 덮지 않게 한다.)
+    // If there's been recent progress (last sentAt within 10 min), it's a genuinely live send → don't touch it.
+    // (Prevents mis-marking slow/retrying/contended sends as aborted even when they exceed the estimate.)
     const progressed = (data.summary?.sent ?? 0) + (data.summary?.failed ?? 0);
     if (progressed > 0) {
       const lastSentAt = (data.recipients ?? [])
         .map((r) => (r.sentAt ? new Date(r.sentAt).getTime() : 0))
         .reduce((a, b) => Math.max(a, b), 0);
       const idleMs = now - (lastSentAt || created);
-      if (idleMs < 10 * 60 * 1000) continue; // 10분 내 활동 → 진행 중
+      if (idleMs < 10 * 60 * 1000) continue; // activity within 10 min → in progress
     }
-    // 동적 cutoff: 예상 소요시간(수신자 × 간격 × 재시도여유 3배)의 2배 + 30분, 최소 minAgeMs.
+    // Dynamic cutoff: 2× the estimated duration (recipients × gap × 3 retry margin) + 30 min, at least minAgeMs.
     const estMs = (data.summary?.total ?? data.recipients?.length ?? 0) * SEND_MIN_GAP_MS * 3;
     const cutoffMs = Math.max(minAgeMs, estMs * 2 + 30 * 60 * 1000);
     if (now - created < cutoffMs) continue;
@@ -174,16 +174,16 @@ export async function cleanupStaleSends(minAgeMs = 60 * 60 * 1000): Promise<numb
       }));
       fixed++;
     } catch {
-      // 동시 수정이 끼면 다음 사이클에서 재시도
+      // if a concurrent update cuts in, retry next cycle
     }
   }
   return fixed;
 }
 
 /**
- * 모든 send의 resend id → 메타 매핑. 트래킹 상태 lookup에 사용.
- * 사이드바가 15초마다 폴링하므로 짧은 TTL 캐시. updateSend 가 진행 중 발송에 resendId 를
- * 새로 추가해도 다음 폴링(최대 INDEX_CACHE_TTL_MS) 안에 반영된다.
+ * Map of every send's resend id → meta. Used for tracking-status lookups.
+ * Short-TTL cache since the sidebar polls every 15s. Even when updateSend adds a new resendId
+ * to an in-progress send, it's reflected within the next poll (at most INDEX_CACHE_TTL_MS).
  */
 const INDEX_CACHE_TTL_MS = 5_000;
 let _idxCache: {
@@ -212,12 +212,12 @@ export async function buildResendIdIndex(): Promise<
   return idx;
 }
 
-/** 캐시 무효화 — 진행 중 발송이 새 resendId 를 추가했거나 webhook 직후 즉시 반영 필요할 때. */
+/** Invalidate the cache — when an in-progress send added a new resendId, or right after a webhook needs immediate reflection. */
 export function invalidateResendIdIndex(): void {
   _idxCache = null;
 }
 
-// ── 발송 성과 집계 (오픈율/클릭률 등) ──
+// ── Send performance aggregation (open rate / click rate, etc.) ──
 export type SendMetrics = {
   total: number;
   sent: number;
@@ -229,7 +229,7 @@ export type SendMetrics = {
   complained: number;
 };
 
-/** 레코드의 recipients 에서 라이브 상태 기준 집계. liveStatus 우선, 없으면 send status. */
+/** Aggregate from a record's recipients by live status. liveStatus takes priority, else send status. */
 export function computeMetrics(rec: SendRecord): SendMetrics {
   const m: SendMetrics = { total: 0, sent: 0, failed: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0 };
   for (const r of rec.recipients ?? []) {
@@ -246,7 +246,7 @@ export function computeMetrics(rec: SendRecord): SendMetrics {
   return m;
 }
 
-/** 사용자의 최근 window(ms) 내 발송 시도 수(레이트리밋). 시도=summary.total 합. test 발송은 제외. */
+/** Number of send attempts by a user within the recent window(ms) (rate limit). attempt = sum of summary.total. test sends excluded. */
 export async function userSendVolume(email: string, windowMs: number): Promise<number> {
   await ensureDir();
   const files = await fs.readdir(SENDS_DIR);
@@ -265,7 +265,7 @@ export async function userSendVolume(email: string, windowMs: number): Promise<n
   return total;
 }
 
-/** 멱등성: 같은 hash 의 발송이 최근 window 안에 있으면 그 레코드 반환(중복 발송 방지). */
+/** Idempotency: if a send with the same hash exists within the recent window, return that record (prevents duplicate sends). */
 export async function findRecentSendByHash(hash: string, windowMs: number): Promise<SendRecord | null> {
   if (!hash) return null;
   await ensureDir();
@@ -284,8 +284,8 @@ export async function findRecentSendByHash(hash: string, windowMs: number): Prom
 }
 
 /**
- * 라이브 상태 진행 순위. 웹훅은 순서 보장이 없어(예: opened 뒤 delivered 도착)
- * 더 진전된 상태를 이전 상태로 되돌리면 안 된다. bounced/complained 는 종단(최상위).
+ * Live-status progression ranking. Webhooks aren't order-guaranteed (e.g. delivered arrives after opened),
+ * so a more-advanced status must not be rolled back to an earlier one. bounced/complained are terminal (top rank).
  */
 const LIVE_STATUS_RANK: Record<string, number> = {
   sent: 1, queued: 1, delivery_delayed: 1,
@@ -295,12 +295,12 @@ const LIVE_STATUS_RANK: Record<string, number> = {
 function rankStatus(s?: string): number {
   return LIVE_STATUS_RANK[(s ?? "").toLowerCase()] ?? 0;
 }
-/** next 상태를 current 위에 적용해도 되는지(역전 금지). 동순위는 허용(타임스탬프 갱신). */
+/** Whether next status may be applied over current (no regression). Equal rank is allowed (timestamp refresh). */
 export function shouldApplyLiveStatus(current: string | undefined, next: string): boolean {
   return rankStatus(next) >= rankStatus(current);
 }
 
-/** webhook/조회로 받은 라이브 상태를 resendId 기준으로 해당 레코드에 영속(순서 역전 방지). */
+/** Persist a live status received via webhook/lookup to the matching record by resendId (no order regression). */
 export async function applyLiveStatus(resendId: string, status: string): Promise<boolean> {
   const idx = await buildResendIdIndex();
   const hit = idx.get(resendId);
@@ -318,10 +318,9 @@ export async function applyLiveStatus(resendId: string, status: string): Promise
   return true;
 }
 
-/** 발송 중단 요청 플래그 세팅. 발송 루프가 다음 반복에서 감지해 종료. */
+/** Set the abort-request flag for a send. The send loop detects it on the next iteration and stops. */
 export async function requestAbort(sendId: string): Promise<SendRecord | null> {
   return updateSend(sendId, (r) =>
     r.status === "running" ? { ...r, abortRequested: true } : r
   ).catch(() => null);
 }
-

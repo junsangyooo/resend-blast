@@ -6,7 +6,7 @@ import { brand } from "@/brand.config";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 상수시간 비교 (타이밍 공격 완화). 길이 불일치는 즉시 false. */
+/** Constant-time comparison (mitigates timing attacks). Length mismatch returns false immediately. */
 function safeEqual(a: string, b: string): boolean {
   const ab = Buffer.from(a);
   const bb = Buffer.from(b);
@@ -15,8 +15,8 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /**
- * password 모드 로그인 — 단일 비밀번호(.env.local 의 ACCESS_PASSWORD) 검증 후
- * brand.auth.operatorEmail 신원으로 세션 발급. google 모드에서는 동작하지 않는다.
+ * password mode login — verifies a single password (ACCESS_PASSWORD in .env.local), then
+ * issues a session under the brand.auth.operatorEmail identity. Does not work in google mode.
  */
 export async function POST(req: NextRequest) {
   if (brand.auth.mode !== "password") {
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   }
   const expected = process.env.ACCESS_PASSWORD;
   if (!expected) {
-    // 비밀번호 미설정 — silent 허용 금지(누구나 통과 사고 방지).
+    // Password not configured — never allow silently (prevents an everyone-passes accident).
     return NextResponse.json(
       { error: "서버에 ACCESS_PASSWORD 가 설정되지 않았습니다." },
       { status: 500 },

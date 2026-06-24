@@ -1,6 +1,6 @@
 /**
- * 트랜잭션 메일(수신거부 확인 등) — /api/send 경로를 거치지 않고 Resend 로 직접 발송.
- * 억제목록 필터/레이트리밋과 무관(확인 메일은 본인 행동에 대한 즉시 응답).
+ * Transactional mail (unsubscribe confirmation, etc.) — sent directly via Resend without going through /api/send.
+ * Independent of suppression-list filtering / rate limiting (a confirmation mail is an immediate response to the user's own action).
  */
 import { Resend } from "resend";
 import { FROM_DEFAULT, SENDER_ORG_NAME } from "./config";
@@ -11,8 +11,8 @@ function esc(s: string): string {
 }
 
 /**
- * 수신거부 완료 확인 메일 — 재구독(Resubscribe) 버튼 포함.
- * 실패해도 throw 하지 않음(수신거부 자체는 이미 처리됨). 발송 성공 여부 boolean 반환.
+ * Unsubscribe-completion confirmation mail — includes a Resubscribe button.
+ * Doesn't throw on failure (the unsubscribe itself is already done). Returns a boolean for send success.
  */
 export async function sendUnsubscribeConfirmation(toEmail: string, resubUrl: string): Promise<boolean> {
   const key = process.env.RESEND_EMAIL_TRACKING_API_KEY;
