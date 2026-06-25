@@ -4,6 +4,7 @@ node_modules/
 .env*.local
 *.log
 .DS_Store
+.superpowers/
 
 # 브랜드 설정은 배포(회사/개인)별 파일 — 커밋하지 않는다.
 # 커밋되는 건 brand.config.example.ts 템플릿뿐. 처음 셋업: cp brand.config.example.ts brand.config.ts
