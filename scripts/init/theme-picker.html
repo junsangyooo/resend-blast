@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>테마 선택 — Email Blast</title>
+<style>
+  :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  *{box-sizing:border-box} body{margin:0;background:#f6f7fb;color:#1f2430}
+  .wrap{max-width:1160px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.4px}
+  .sub{margin:0 0 28px;color:#6b7280;font-size:15px}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media(max-width:920px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:620px){.grid{grid-template-columns:1fr}}
+  .card{background:#fff;border:1.5px solid #e6e8ef;border-radius:16px;overflow:hidden;cursor:pointer;
+    transition:transform .12s,box-shadow .12s,border-color .12s;display:flex;flex-direction:column}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(20,24,40,.10)}
+  .card.sel{border-color:var(--a);box-shadow:0 0 0 3px color-mix(in srgb,var(--a) 28%,transparent)}
+  .console{height:176px;background:#eceef3;padding:12px}
+  .win{height:100%;background:#fff;border:1px solid #e3e5ec;border-radius:9px;overflow:hidden;display:flex;flex-direction:column}
+  .bar{height:18px;background:#f3f4f7;border-bottom:1px solid #eaebf0;display:flex;align-items:center;gap:5px;padding:0 8px}
+  .bar i{width:7px;height:7px;border-radius:50%;background:#d4d6dd}
+  .body{flex:1;display:flex;min-height:0}
+  .rail{width:42px;background:var(--d);display:flex;flex-direction:column;align-items:center;padding-top:9px;gap:9px}
+  .rail .lg{width:18px;height:18px;border-radius:6px;background:#fff}
+  .rail .ic{width:18px;height:18px;border-radius:5px;background:rgba(255,255,255,.28)}
+  .rail .ic.on{background:rgba(255,255,255,.95)}
+  .main{flex:1;padding:11px 12px;min-width:0}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
+  .word{height:9px;width:64px;border-radius:4px;background:var(--a)}
+  .btn{font-size:8px;font-weight:700;color:#fff;padding:5px 10px;border-radius:6px;background:linear-gradient(135deg,var(--c),var(--a))}
+  .tabs{display:flex;gap:12px;margin-bottom:10px}
+  .tab{height:6px;width:34px;border-radius:3px;background:#dfe1e8}
+  .tab.on{background:var(--a)}
+  .rows .r{height:7px;border-radius:4px;background:#e7e8ee;margin-bottom:6px}
+  .rows .r:nth-child(2){width:82%}.rows .r:nth-child(3){width:68%}
+  .chips{display:flex;align-items:center;gap:7px;margin-top:10px}
+  .badge{font-size:8px;font-weight:700;color:var(--a);background:var(--t);border:1px solid color-mix(in srgb,var(--a) 22%,#fff);padding:3px 7px;border-radius:999px}
+  .stat{font-size:16px;font-weight:800;color:var(--a);margin-left:auto}
+  .meta{padding:14px 16px 16px;border-top:1px solid #f0f1f4}
+  .mtop{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+  .meta h3{margin:0;font-size:16px}
+  .vibe{color:#8a8f9c;font-size:12.5px}
+  .sw{display:flex;gap:6px}.sw div{width:22px;height:22px;border-radius:6px;border:1px solid rgba(0,0,0,.06)}
+  .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#1f2430;color:#fff;
+    padding:12px 18px;border-radius:10px;font-size:14px;opacity:0;transition:all .2s;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .hint{margin-top:26px;font-size:13px;color:#9aa0ac;text-align:center}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>테마를 골라주세요</h1>
+    <p class="sub">고른 색은 <b>웹 콘솔(앱) UI</b>에만 적용됩니다. 이메일 본문 디자인은 영향을 받지 않습니다.</p>
+    <div class="grid" id="grid"></div>
+    <div class="hint">카드를 클릭하면 선택됩니다. 선택 후 창을 꺼주세요.</div>
+  </div>
+  <div class="toast" id="toast"></div>
+<script>
+  /*__INIT_INJECT__*/
+  const THEMES = window.__THEMES || [];
+  const grid = document.getElementById("grid");
+  const toast = document.getElementById("toast");
+  THEMES.forEach((t) => {
+    const el = document.createElement("div");
+    el.className = "card";
+    el.style.setProperty("--a", t.accent); el.style.setProperty("--c", t.cta);
+    el.style.setProperty("--d", t.deep);   el.style.setProperty("--t", t.tint);
+    el.innerHTML =
+      '<div class="console"><div class="win"><div class="bar"><i></i><i></i><i></i></div>'+
+      '<div class="body"><div class="rail"><div class="lg"></div><div class="ic on"></div><div class="ic"></div><div class="ic"></div></div>'+
+      '<div class="main"><div class="top"><div class="word"></div><div class="btn">보내기</div></div>'+
+      '<div class="tabs"><div class="tab on"></div><div class="tab"></div><div class="tab"></div></div>'+
+      '<div class="rows"><div class="r"></div><div class="r"></div><div class="r"></div></div>'+
+      '<div class="chips"><div class="badge">발송됨</div><div class="stat">128</div></div></div></div></div></div>'+
+      '<div class="meta"><div class="mtop"><h3>'+t.name+'</h3><div class="sw">'+
+      '<div style="background:'+t.accent+'"></div><div style="background:'+t.cta+'"></div><div style="background:'+t.deep+'"></div>'+
+      '</div></div><div class="vibe">'+t.vibe+'</div></div>';
+    el.addEventListener("click", () => select(t, el));
+    grid.appendChild(el);
+  });
+  function select(t, el) {
+    document.querySelectorAll(".card").forEach((c) => c.classList.remove("sel"));
+    el.classList.add("sel");
+    fetch("/select", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ theme: t.id, token: window.__TOKEN }) }).catch(() => {});
+    toast.textContent = '"'+t.name+'" 선택됨 — 창을 꺼주세요';
+    toast.classList.add("show");
+  }
+</script>
+</body>
+</html>
