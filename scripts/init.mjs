@@ -1,23 +1,19 @@
 // scripts/init.mjs — Interactive setup wizard orchestrator for Email Blast
 // Wires together the pure modules in scripts/init/* to produce brand.config.ts + .env.local.
 //
-// DEVIATION FROM BRIEF re: readline approach:
-//   The brief uses rl.question() from node:readline/promises for all prompts.
-//   Under Node 24+ with piped (non-TTY) stdin, rl.question() pauses the input stream
-//   after reading one line and the subsequent .question() calls never resolve — causing
-//   the wizard to hang after the first answer. The brief explicitly says to fix this.
+// Line-input approach:
+//   All prompt reads go through createLineReader (scripts/init/line-reader.mjs) which
+//   maintains a FIFO buffer + waiter queue over rl.on("line", ...) events. This avoids
+//   the Node 24+ rl.question() hang under piped stdin AND correctly handles the theme-step
+//   race where a browser pick must cancel a pending terminal read without swallowing the
+//   next answer line.
 //
-//   Fix: We drive all line input via a single shared async iterator
-//   (rl[Symbol.asyncIterator]()) backed by readline, and write prompts manually via
-//   stdout.write(). This keeps exactly one readline interface on stdin and is compatible
-//   with both piped and interactive (TTY) use. The pickTheme() prompt for the theme
-//   number also uses the same iterator.
-//
-//   askMasked: Under piped/non-TTY stdin masking is skipped entirely (pointless on pipe).
-//   Under TTY, we suppress echo via rl._writeToOutput swap on the single shared rl
-//   instead of opening a second interface (which would swallow subsequent piped lines).
+// Password masking:
+//   When process.stdin.isTTY, echo is suppressed via process.stdin.setRawMode() + manual
+//   char-by-char reading (no extra readline interface). When not a TTY (piped), the line
+//   is read plainly via the shared line reader (masking is meaningless on a pipe).
 
-import { createInterface } from "node:readline/promises";
+import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 import { readFile, writeFile, copyFile, access } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -29,6 +25,7 @@ import { THEMES, getTheme, appTokensFor } from "./init/themes.mjs";
 import { isEmail, isDomain, suggestSenderDomain } from "./init/validate.mjs";
 import { renderEnv } from "./init/render-env.mjs";
 import { renderConfig } from "./init/render-config.mjs";
+import { createLineReader } from "./init/line-reader.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const p = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -41,15 +38,14 @@ const exists = async (f) => {
   }
 };
 
-// Single readline interface; driven via async iterator to avoid Node 24 rl.question() hang.
+// Single readline interface in non-terminal mode (compatible with piped and TTY stdin).
+// Line input is driven entirely by createLineReader to avoid Node 24+ async-iterator issues.
 const rl = createInterface({ input: stdin, output: stdout, terminal: false });
-const lineIter = rl[Symbol.asyncIterator]();
+const lineReader = createLineReader(rl);
 
-// Read the next line from stdin (shared iterator — never two consumers at once).
+// Read the next line from stdin.
 async function nextLine() {
-  const { value, done } = await lineIter.next();
-  if (done) throw new Error("stdin closed unexpectedly");
-  return (value ?? "").trim();
+  return lineReader.nextLine();
 }
 
 async function ask(q, def) {
@@ -66,41 +62,61 @@ async function askValid(q, def, ok, err) {
   }
 }
 
-// Password masking on the single shared rl to avoid a second interface.
-// Under piped/non-TTY stdin we skip masking (pointless on pipe) and just ask plainly.
-// Under TTY, mute stdout output for the typed characters.
+// Password masking:
+//   - Not a TTY (piped): read plainly via the shared line reader.
+//   - TTY: use setRawMode + char-by-char read so we can suppress echo without opening
+//     a second readline interface (which would race with the shared one).
 async function askMasked(q) {
-  const isTTY = process.stdin.isTTY;
-  if (!isTTY) {
-    // Piped input — masking is meaningless, just read the line normally.
-    return await ask(q);
-  }
-
-  // TTY: mute echo during typing via _writeToOutput swap.
-  // The first call includes the prompt text — let it through; suppress subsequent char echoes.
-  let promptWritten = false;
-  const origWrite = rl._writeToOutput ? rl._writeToOutput.bind(rl) : null;
-
-  if (origWrite) {
-    rl._writeToOutput = (str) => {
-      if (!promptWritten) {
-        origWrite(str);
-        if (str.includes(q)) promptWritten = true;
-      } else if (str === "\r\n" || str === "\n" || str === "\r") {
-        origWrite(str);
-      }
-      // Suppress character echoes
-    };
-  }
-
   stdout.write(`${q} `);
-  const a = await nextLine();
 
-  if (origWrite) {
-    rl._writeToOutput = origWrite;
+  if (!process.stdin.isTTY) {
+    // Piped — masking is pointless, just read normally.
+    const a = await nextLine();
+    return a;
   }
-  stdout.write("\n");
-  return a;
+
+  // TTY — read raw, suppress echo, collect chars manually.
+  return new Promise((resolve, reject) => {
+    // Pause the readline interface so it doesn't consume the raw keystrokes.
+    rl.pause();
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let buf = "";
+
+    function onData(chunk) {
+      const str = chunk.toString();
+      for (const ch of str) {
+        const code = ch.charCodeAt(0);
+        if (code === 13 || code === 10) {
+          // Enter — done
+          stdin.setRawMode(false);
+          stdin.removeListener("data", onData);
+          stdin.pause();
+          stdout.write("\n");
+          rl.resume();
+          resolve(buf);
+          return;
+        } else if (code === 127 || code === 8) {
+          // Backspace
+          if (buf.length > 0) buf = buf.slice(0, -1);
+        } else if (code === 3) {
+          // Ctrl-C
+          stdin.setRawMode(false);
+          stdin.removeListener("data", onData);
+          stdin.pause();
+          stdout.write("\n");
+          rl.resume();
+          reject(new Error("Ctrl-C during password input"));
+          return;
+        } else if (code >= 32) {
+          buf += ch;
+        }
+      }
+    }
+
+    stdin.on("data", onData);
+  });
 }
 
 async function confirm(q, def = true) {
@@ -133,9 +149,15 @@ async function pickTheme() {
 
   return new Promise((resolve, reject) => {
     let done = false;
+
+    // cancelableRead holds the { promise, cancel } for the terminal-number race leg.
+    let cancelableRead = null;
+
     const finish = (id) => {
       if (done) return;
       done = true;
+      // Cancel the pending terminal read so the next prompt's line isn't swallowed.
+      if (cancelableRead) cancelableRead.cancel();
       try {
         server.close();
       } catch {}
@@ -174,26 +196,41 @@ async function pickTheme() {
       res.end();
     });
 
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(0, "127.0.0.1", async () => {
       const url = `http://127.0.0.1:${server.address().port}/?token=${token}`;
       openBrowser(url);
       console.log(`\n  테마를 브라우저에서 고르세요: ${url}`);
       console.log(
         `  또는 번호 입력: ${THEMES.map((t, i) => `${i + 1}) ${t.name}`).join("   ")}`
       );
-      // Race: terminal number input vs browser POST — both use the same async iterator.
-      stdout.write("  > ");
-      nextLine()
-        .then((ans) => {
-          const i = parseInt(ans.trim(), 10);
-          if (i >= 1 && i <= THEMES.length) finish(THEMES[i - 1].id);
-          // If invalid number, the browser click is the fallback (server stays open).
-          // In piped mode a valid number is always expected.
-        })
-        .catch((err) => {
-          // stdin closed without a valid number — reject so main() surfaces the error.
-          if (!done) reject(err);
-        });
+
+      // Loop: re-prompt on invalid number until a valid number OR browser pick.
+      // Each iteration uses a cancelable read so a browser pick cleanly wins the race.
+      while (!done) {
+        stdout.write("  > ");
+        cancelableRead = lineReader.nextLineCancelable();
+
+        let ans;
+        try {
+          ans = await cancelableRead.promise;
+        } catch {
+          // stdin closed
+          if (!done) reject(new Error("stdin closed during theme selection"));
+          return;
+        }
+
+        if (done) return; // browser picked while we were awaiting
+
+        const i = parseInt(ans, 10);
+        if (i >= 1 && i <= THEMES.length) {
+          finish(THEMES[i - 1].id);
+        } else {
+          // Invalid number — tell the user and loop to re-prompt.
+          console.log(
+            `  ⚠ 1~${THEMES.length} 사이의 번호를 입력하세요 (또는 브라우저에서 고르세요).`
+          );
+        }
+      }
     });
   });
 }
