@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "next lint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "init": "node scripts/init.mjs"
   },
   "dependencies": {
     "@azure/storage-blob": "^12.31.0",
