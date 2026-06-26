@@ -227,26 +227,24 @@ Code and config alone aren't enough; you also need to register with external ser
 
 ## 6. Git operation
 
-`brand.config.ts` is **gitignored**; the committed template is `brand.config.example.ts`.
-To set up, copy the template and edit your copy:
+`brand.config.ts` is **gitignored** — it's generated per-deploy by `npm run init`.
 
 ```bash
-cp brand.config.example.ts brand.config.ts
+npm run init     # interactive wizard generates brand.config.ts + .env.local
 ```
 
-Then edit `brand.config.ts` with your brand values. Because it's gitignored, your brand stays local
+Edit `brand.config.ts` with your brand values. Because it's gitignored, your brand stays local
 and never collides with upstream updates.
 
 > (Note) If you later want to pull updates from the original source, add it as a remote
 > (`git remote add upstream <repo>` → `git fetch/merge upstream`). Since your brand lives only in the
-> gitignored `brand.config.ts`, upstream changes to `brand.config.example.ts` merge cleanly and your
-> own config is untouched.
+> gitignored `brand.config.ts`, upstream changes merge cleanly and your own config is untouched.
 
 ---
 
 ## 7. Migration checklist
 
-- [ ] `cp brand.config.example.ts brand.config.ts`
+- [ ] `npm run init` — generates `brand.config.ts` + `.env.local`
 - [ ] Fill in all your keys in `.env.local` (section 1)
 - [ ] Replace the base values at the top of `brand.config.ts` (COMPANY, 2 domains, website, ASSET_BASE) and design tokens
 - [ ] Choose `auth.mode` (`"password"` or `"google"`) and set the matching env/config

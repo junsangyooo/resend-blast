@@ -68,16 +68,11 @@ a Google Cloud OAuth client (only for Google login mode). Neither is needed for 
 ```bash
 git clone <your-repo-url> && cd resend-blast
 npm install
-
-cp brand.config.example.ts brand.config.ts   # public brand config
-cp .env.local.example .env.local              # secret keys
-
+npm run init     # interactive wizard generates brand.config.ts + .env.local
 npm run dev      # http://localhost:3001
 npm test         # vitest
 npm run build    # production build
 ```
-
-Then fill in the two files — see the guides below.
 
 ---
 
@@ -107,8 +102,7 @@ Then fill in the two files — see the guides below.
 ## Project structure
 
 ```
-brand.config.example.ts   committed brand template (copy to brand.config.ts, which is gitignored)
-.env.local.example        secret-keys template
+scripts/init/             init wizard (npm run init) — generates brand.config.ts + .env.local
 app/                      pages + API routes (auth, send, lists, templates, upload, assets …)
 components/               UI: send form, tracking, block composer, settings …
 lib/                      blocks (email renderer), personalize, lists, senders, admins, storage, session …

@@ -18,10 +18,7 @@ End-to-end setup for running this project as your own branded email tool. Only t
 ```bash
 git clone <your-repo-url> && cd resend-blast
 npm install
-
-cp brand.config.example.ts brand.config.ts   # public brand config
-cp .env.local.example .env.local              # secret keys
-
+npm run init     # interactive wizard generates brand.config.ts + .env.local
 npm run dev      # http://localhost:3001
 ```
 
@@ -86,10 +83,8 @@ See [`production.md`](production.md) for security and pre-deploy hardening.
 ## Checklist
 
 - [ ] `npm install`
-- [ ] `cp brand.config.example.ts brand.config.ts` → edit base values & design tokens
-- [ ] `cp .env.local.example .env.local`
+- [ ] `npm run init` — generates `brand.config.ts` + `.env.local`
 - [ ] Resend API key + **domain verified** ([`resend.md`](resend.md))
-- [ ] `AUTH_SESSION_SECRET`
 - [ ] `auth.mode` → `ACCESS_PASSWORD` (password) or `GOOGLE_CLIENT_*` (google)
 - [ ] `SENDER_POSTAL_ADDRESS` (external sends)
 - [ ] `npm test` → `npm run build` → deploy

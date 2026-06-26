@@ -54,7 +54,7 @@ All tests pass via `npm test`, and the project builds cleanly with `npm run buil
 
 ### 2-1. Environment variables
 
-Set these in your secrets store and deploy them as `.env.local` (or your platform's env config). Note: `brand.config.ts` is gitignored — copy `brand.config.example.ts` to `brand.config.ts` for your public brand identity (company name, domain, sender, logo, colors, UI strings). Secrets stay in env vars.
+Set these in your secrets store and deploy them as `.env.local` (or your platform's env config). Note: `brand.config.ts` is gitignored — generate it per-deploy via `npm run init` for your public brand identity (company name, domain, sender, logo, colors, UI strings). Secrets stay in env vars.
 
 | Variable | Required? | Description |
 |---|---|---|

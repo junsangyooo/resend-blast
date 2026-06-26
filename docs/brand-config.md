@@ -9,9 +9,9 @@ brand.config.ts   ← public brand identity, design, auth mode   (safe to expose
 .env.local        ← API keys, passwords, secrets                (never committed)
 ```
 
-> The file is **gitignored**. The committed template is `brand.config.example.ts`. Set up with:
+> The file is **gitignored** — generated per-deploy by `npm run init`. Set up with:
 > ```bash
-> cp brand.config.example.ts brand.config.ts
+> npm run init     # interactive wizard generates brand.config.ts + .env.local
 > ```
 
 ---
