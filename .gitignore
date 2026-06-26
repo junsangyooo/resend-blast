@@ -6,11 +6,11 @@ node_modules/
 .DS_Store
 .superpowers/
 
-# brand.config.ts is generated per-deploy by `npm run init` (template: scripts/init/brand.config.template.ts).
-brand.config.ts
+# src/brand.config.ts is generated per-deploy by `npm run init` (template: scripts/init/brand.config.template.ts).
+src/brand.config.ts
 
 # init wizard writes timestamped backups of secret/brand files before overwriting — never commit them.
-brand.config.ts.bak.*
+src/brand.config.ts.bak.*
 .env.local.bak.*
 
 # data/ 는 운영 상태(리스트·발송로그·로고)를 GitHub로 백업하기 위해 화이트리스트 방식.

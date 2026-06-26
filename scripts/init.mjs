@@ -276,7 +276,7 @@ function appTokensToValues(t) {
 
 async function main() {
   console.log("\n=== Email Blast 설정 (npm run init) ===\n");
-  const brandFile = `${root}brand.config.ts`;
+  const brandFile = `${root}src/brand.config.ts`;
   const envFile = `${root}.env.local`;
 
   if ((await exists(brandFile)) || (await exists(envFile))) {
