@@ -15,7 +15,7 @@
 
 import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
-import { readFile, writeFile, copyFile, access } from "node:fs/promises";
+import { readFile, writeFile, copyFile, access, chmod } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -250,7 +250,10 @@ async function pickTheme() {
 async function backupIfExists(file) {
   if (await exists(file)) {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    await copyFile(file, `${file}.bak.${stamp}`);
+    const dest = `${file}.bak.${stamp}`;
+    await copyFile(file, dest);
+    // Backups can contain secrets (.env.local) — restrict to owner-only.
+    await chmod(dest, 0o600);
     console.log(`  기존 ${file} → 백업됨 (.bak.${stamp})`);
   }
 }
@@ -346,7 +349,10 @@ async function main() {
   await backupIfExists(brandFile);
   await backupIfExists(envFile);
   await writeFile(brandFile, renderConfig(template, v));
+  // .env.local holds plaintext secrets (ACCESS_PASSWORD, AUTH_SESSION_SECRET) — owner-only.
+  // chmod after write guarantees 0600 even when the file already existed (writeFile keeps old perms).
   await writeFile(envFile, renderEnv(v, sessionSecret));
+  await chmod(envFile, 0o600);
 
   console.log("\n✓ 설정 완료!");
   console.log("  다음 단계 → 배포: docs/production.md");
