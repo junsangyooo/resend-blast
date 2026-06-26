@@ -85,11 +85,17 @@ async function askMasked(q) {
     let buf = "";
 
     function onData(chunk) {
-      const str = chunk.toString();
-      for (const ch of str) {
-        const code = ch.charCodeAt(0);
+      // Iterate over every byte in the chunk so that multi-character data events
+      // (fast typing, paste, pseudo-TTY) are handled correctly. A single 'data'
+      // event may contain multiple bytes; Enter may sit mid-chunk, and we must not
+      // drop bytes before it or crash on bytes that appear after it.
+      const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+      for (let i = 0; i < bytes.length; i++) {
+        const code = bytes[i];
         if (code === 13 || code === 10) {
-          // Enter — done
+          // Enter (CR or LF) — restore terminal state and resolve.
+          // Remaining bytes in this chunk are ignored (harmless: a trailing
+          // LF after CR, or any bytes that arrived after line-end).
           stdin.setRawMode(false);
           stdin.removeListener("data", onData);
           stdin.pause();
@@ -97,9 +103,6 @@ async function askMasked(q) {
           rl.resume();
           resolve(buf);
           return;
-        } else if (code === 127 || code === 8) {
-          // Backspace
-          if (buf.length > 0) buf = buf.slice(0, -1);
         } else if (code === 3) {
           // Ctrl-C
           stdin.setRawMode(false);
@@ -109,8 +112,12 @@ async function askMasked(q) {
           rl.resume();
           reject(new Error("Ctrl-C during password input"));
           return;
+        } else if (code === 127 || code === 8) {
+          // Backspace — remove last character from buffer
+          if (buf.length > 0) buf = buf.slice(0, -1);
         } else if (code >= 32) {
-          buf += ch;
+          buf += String.fromCharCode(code);
+          stdout.write("*");
         }
       }
     }
@@ -214,8 +221,13 @@ async function pickTheme() {
         try {
           ans = await cancelableRead.promise;
         } catch {
-          // stdin closed
-          if (!done) reject(new Error("stdin closed during theme selection"));
+          // stdin closed — close the server on the reject path so the process
+          // does not hang with an open HTTP server.
+          if (!done) {
+            done = true;
+            try { server.close(); } catch {}
+            reject(new Error("stdin closed during theme selection"));
+          }
           return;
         }
 
