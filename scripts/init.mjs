@@ -259,7 +259,8 @@ async function preserveSessionSecret(envFile) {
   if (!(await exists(envFile))) return null;
   const txt = await readFile(envFile, "utf8");
   const m = txt.match(/^AUTH_SESSION_SECRET=(.+)$/m);
-  return m ? m[1] : null;
+  // .trim() guards against a trailing \r (CRLF-edited env file) being captured into the secret.
+  return m ? m[1].trim() : null;
 }
 
 function appTokensToValues(t) {
