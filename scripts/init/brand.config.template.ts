@@ -173,6 +173,11 @@ export const brand = {
     { id: "primary", label: COMPANY, url: `${ASSET_BASE}/header-logo.png`, width: 130 },
   ] as BrandLogo[],
 
+  // ── AI Studio ───────────────────────────────────────────────────────────────
+  ai: {
+    model: "claude-haiku-4-5", // model for generation/editing; auth stays in .env.local
+  },
+
   // ── Template defaults ───────────────────────────────────────────────────────
   templates: {
     defaultSubject: `[알림] ${COMPANY}`,

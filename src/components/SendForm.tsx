@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import AddTemplateDialog from "./AddTemplateDialog";
-import TemplateComposer from "./TemplateComposer";
 import CreateEmailDialog from "./CreateEmailDialog";
 import EmailPickerDialog, { type PickerTemplate } from "./EmailPickerDialog";
 import ListSelectDialog, { type ListRow } from "./ListSelectDialog";
@@ -77,8 +76,6 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
   // Popup state — every step's list/input UI is delegated to a popup.
   const [createOpen, setCreateOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [composer, setComposer] = useState<{ open: boolean; editName: string | null }>({ open: false, editName: null });
-  const [htmlEditName, setHtmlEditName] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [listSelectOpen, setListSelectOpen] = useState(false);
   const [listEditor, setListEditor] = useState<{ slug: string | null } | null>(null);
@@ -189,11 +186,9 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
     }
   }
 
-  // Edit an email — composed (block) ones go to the block composer, raw-HTML ones to AddTemplateDialog.
+  // Edit an email — studio handles both composed-spec and raw-HTML cases itself.
   function editTemplate(name: string) {
-    const t = templates.find((x) => x.name === name);
-    if (t?.composed) setComposer({ open: true, editName: name });
-    else setHtmlEditName(name);
+    window.location.href = `/studio?edit=${encodeURIComponent(name)}`;
   }
 
   // Member preview for the selected lists — preserves selection order (same address in multiple
@@ -381,7 +376,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
               </button>
               <button
                 onClick={() => editTemplate(tmplObj.name)}
-                title={tmplObj.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"}
+                title="스튜디오에서 수정"
                 className="icon-btn absolute top-2.5 right-2 text-muted/60 hover:text-brand"
               >
                 <EditIcon />
@@ -654,21 +649,12 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
       <CreateEmailDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreate={() => { setCreateOpen(false); setComposer({ open: true, editName: null }); }}
         onUpload={() => { setCreateOpen(false); setUploadOpen(true); }}
       />
 
       <AddTemplateDialog
-        open={uploadOpen || !!htmlEditName}
-        editName={htmlEditName}
-        onClose={() => { setUploadOpen(false); setHtmlEditName(null); }}
-        onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
-      />
-
-      <TemplateComposer
-        open={composer.open}
-        editName={composer.editName}
-        onClose={() => setComposer({ open: false, editName: null })}
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
         onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
       />
 

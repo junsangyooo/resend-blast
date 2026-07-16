@@ -3,17 +3,15 @@
 import { useEscClose } from "./hooks";
 
 /**
- * New-email entry popup — block composer / upload (HTML). Same two entry points
- * the old left rail's "이메일" menu had, moved onto step 1 of the send screen.
+ * 새 이메일 만들기 선택 팝업 — 생성(AI 스튜디오) / 업로드(HTML).
+ * 구 좌측 레일의 "이메일" 메뉴와 동일한 두 진입점을 발송 화면 1단계로 옮긴 것.
  */
 export default function CreateEmailDialog({
-  open, onClose, onCreate, onUpload,
+  open, onClose, onUpload,
 }: {
   open: boolean;
   onClose: () => void;
-  /** Open the block composer (TemplateComposer). */
-  onCreate: () => void;
-  /** Open raw HTML input (AddTemplateDialog). */
+  /** HTML 직접 입력(AddTemplateDialog) 열기. */
   onUpload: () => void;
 }) {
   useEscClose(open, onClose);
@@ -32,13 +30,13 @@ export default function CreateEmailDialog({
 
         <div className="p-4 space-y-2">
           <button
-            onClick={onCreate}
+            onClick={() => { window.location.href = "/studio"; }}
             className="w-full text-left rounded-xl border border-border hover:border-brand/50 hover:bg-brand/5 transition p-4 flex items-start gap-3"
           >
-            <span className="text-brand mt-0.5 shrink-0"><LayoutIcon /></span>
+            <span className="text-brand mt-0.5 shrink-0"><SparkIcon /></span>
             <span>
-              <span className="block text-sm font-semibold text-text">블록으로 만들기</span>
-              <span className="block text-[11px] text-muted mt-0.5">블록을 쌓아 온브랜드 메일 제작</span>
+              <span className="block text-sm font-semibold text-text">생성</span>
+              <span className="block text-[11px] text-muted mt-0.5">AI 와 대화로 만들고 그 자리에서 수정</span>
             </span>
           </button>
           <button
@@ -57,11 +55,10 @@ export default function CreateEmailDialog({
   );
 }
 
-function LayoutIcon() {
+function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18M9 21V9" />
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8" />
     </svg>
   );
 }

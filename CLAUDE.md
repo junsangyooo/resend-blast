@@ -26,7 +26,9 @@ scripts/init/            Init wizard (npm run init) — interactive setup genera
 src/app/
   page.tsx               Main — top bar (brand + ProfileMenu) with SendForm filling the rest. No rail/sidebar; send history lives inside settings.
   login/page.tsx         Login screen (password or Google, per auth.mode)
+  studio/page.tsx        AI Studio — chat-driven block/HTML email editor (?edit=<name> to edit existing). 3-pane: ChatPanel · block list + header/footer · live preview
   api/
+    ai/compose/          AI Studio compose (nodejs runtime, NDJSON streaming). Calls claude-agent-sdk query() per turn; model from brand.ai.model; auto-retries once on validateSpec failure
     auth/google/         OAuth start + callback
     auth/password/       Password login (verifies ACCESS_PASSWORD, issues session)
     auth/logout/         Clear session cookie
@@ -43,15 +45,15 @@ src/app/
     suppression/         Unsubscribe / bounce list (read for everyone, removal admins-only)
 src/components/
   SendForm.tsx           Send screen — 3 steps (email / recipients / sender) each delegate their list UI to a popup so everything fits on one screen without scrolling. Right side is the preview canvas.
-  CreateEmailDialog.tsx  Step-1 "new email" entry popup — block composer (TemplateComposer) or upload (AddTemplateDialog)
+  CreateEmailDialog.tsx  Step-1 "new email" entry popup — 생성 (routes to /studio) or 업로드 (AddTemplateDialog)
   EmailPickerDialog.tsx  Email picker popup — every email is always listed (no archive concept); delete is creator/admin only
   ListSelectDialog.tsx   Recipient-list picker popup — checkbox multi-select + inline per-row edit/delete (replaces the old standalone list-management screen)
   SenderDialog.tsx       Shared-sender picker popup (personal sending is the SendForm "내 계정으로" button instead)
   AdhocDialog.tsx        Ad-hoc recipient popup wrapping RecipientInput — SendForm holds the text as the single source
   ConfirmSendModal.tsx   Final send confirm 3-pane (left summary / center per-recipient substituted preview / right recipient list)
   TrackingSidebar.tsx    Send history cards (status distribution bar) + detail modal + live status lookup — embedded as the default tab inside AdminSettings (no longer a standalone sliding panel)
-  TemplateComposer.tsx   Block assembler (canvas style shared with lib/blocks.ts — no duplicate implementation)
   AddTemplateDialog.tsx  Raw HTML input + simultaneous image upload (filename-matched src auto-substitution)
+  studio/                AI Studio editor (used by the /studio route). ChatPanel (NDJSON streaming chat), BlockList (block assembler — superset of the retired TemplateComposer), HeaderFooterBar (logo/footer/subject), PreviewPane (debounced server render), RichText (inline-format toolbar over contentEditable; commits through lib/blocks.sanitizeInline)
   RecipientInput.tsx     Shared recipient input (free-text live parsing + CSV/XLSX column mapping confirm + inline name editing)
   ListEditor.tsx         List create/edit modal (inline member name editing); onSaved reports the created slug so the caller can auto-select it
   AdminSettings.tsx      Settings — default tab is send history (embeds TrackingSidebar) + unsubscribe/bounce; sender & admin tabs locked for non-admins
@@ -59,7 +61,8 @@ src/components/
   ProfileMenu.tsx        Top-bar avatar (Google photo, falls back to an initial letter in password mode) → dropdown (settings/theme/logout); replaces the old left rail
   ThemeToggle.tsx        Light/dark toggle button; also exports the `useTheme()` hook (used by ProfileMenu)
 src/lib/
-  blocks.ts              Block schema + renderTemplate (fixed design-system renderer) ★core. Colors, logos, socials read from brand.config
+  ai/                    AI Studio core (brand-generic, no fs/SDK). types.ts (chat/compose types), prompt.ts (system + turn prompt, brand values injected), spec-validate.ts (strict TemplateSpec sanitizer), extract.ts (fenced-block extraction), examples.ts (few-shot specs)
+  blocks.ts              Block schema + renderTemplate (fixed design-system renderer) ★core. Colors, logos, socials read from brand.config. sanitizeInline is idempotent (RichText re-runs it per keystroke); items/GridCard carry descHtml for rich text
   personalize.ts         Personalization substitution ({{name}}/{{firstName}}/{{name|default}}/{{email}}) — shared client/server, no fs dependency
   templates.ts           File-based email CRUD + spec save/render (saving a new same-name email without the overwrite flag → 409). No archive concept — every email is always listed; permanent delete only (creator/admin; legacy entries with no recorded creator require admin)
   lists.ts               Recipient list CRUD + source-preserving resolve
@@ -107,7 +110,7 @@ Never hardcode values into code or docs (reference names only).
 | `R2_*` | Cloudflare R2 credentials (when `assets.provider = "r2"`) |
 | `AUTH_SESSION_SECRET` | Session JWT signing (= `JWT_SECRET`) |
 | `ADMIN_EMAILS` / `APP_BASE_URL` / `SENDER_*` | (Optional) admins · app URL · compliance. Defaults come from `brand.config.ts` |
-| `ANTHROPIC_API_KEY` | (Optional, reserved) Claude API key for the **planned** AI Studio feature — see "AI Studio (planned)" below. Not read by any code yet. |
+| `ANTHROPIC_API_KEY` | (Optional) Claude API key for AI Studio. The SDK also accepts `CLAUDE_CODE_OAUTH_TOKEN` or a host `claude login` session, so this can be left blank — see "AI Studio" below. |
 
 - **Auth mode, login domain, and sender domain are managed in `brand.config.ts`**
   (`auth.mode` / `auth.loginDomain` / `auth.senderDomain`), not in env. They are constants there
@@ -130,21 +133,28 @@ See `docs/images.md` for the full pipeline.
   - `attach` (default) — embedded as CID inline attachments via `lib/email-images.ts`.
   - `hosted` — referenced by public URL (uploaded through `/api/upload`).
 
-## AI Studio (planned)
-Not implemented yet — no `/studio` route, no `lib/ai/`, no chat UI exist in this repo. This section
-only documents the setting reserved for it, so `npm run init` can collect the key ahead of the feature
-landing (same pattern as the Resend key: optional, skippable).
+## AI Studio
+A chat-driven email editor at `/studio` (also reached from the send screen's "새 이메일 → 생성" and
+every email's edit action). The operator describes the email in natural language; the SDK generates or
+edits a `TemplateSpec` (or raw HTML), which renders through the same `lib/blocks.ts` design system so the
+result is always on-brand. It runs on `@anthropic-ai/claude-agent-sdk` (an agent loop, not `@anthropic-ai/sdk`).
 
-- Planned to run on `@anthropic-ai/claude-agent-sdk` (not `@anthropic-ai/sdk`) — a chat-driven block
-  composer that generates/edits `TemplateSpec` via an agent loop, not a single REST call.
-- Auth for the SDK, once wired up, resolves in this order: `CLAUDE_CODE_OAUTH_TOKEN` env var →
-  `ANTHROPIC_API_KEY` env var → **a Claude CLI session already logged into the host running this app**
-  (`claude login` on the server). The last option means a self-hosted deploy can skip putting any key in
-  `.env.local` at all, as long as the server itself has an authenticated Claude CLI session — useful for
-  operators who already run Claude Code on that box for other things.
-- `npm run init` asks for `ANTHROPIC_API_KEY` as an optional field (Enter to skip, same as the Resend
-  key) and writes it to `.env.local` when given. Leaving it blank is fine — the feature won't exist to
-  consume it until this section is replaced with a real implementation.
+- **Route**: `src/app/studio/page.tsx` — 3-pane editor (chat · block list + header/footer · live preview).
+  `?edit=<name>` loads an existing email (composed spec via `/api/templates/spec`, else raw HTML via
+  `/api/templates/body`). Saving posts to `/api/templates/compose` (spec) or `/api/templates` (HTML).
+- **API**: `src/app/api/ai/compose/route.ts` — `nodejs` runtime, `requireUserEmail()`-gated. Calls
+  `query()` once per turn (`maxTurns: 1`), streams NDJSON `text`/`retry`/`result`/`error` events, and
+  auto-retries once on a `validateSpec` failure. The model comes from `brand.config.ts` `ai.model` — never
+  hardcoded in the route.
+- **Core**: `src/lib/ai/` — `types.ts`, `prompt.ts` (system + turn prompt, brand values injected),
+  `spec-validate.ts` (strict TemplateSpec sanitizer, XSS-safe), `extract.ts` (fenced-block extraction),
+  `examples.ts` (few-shot specs). `src/components/studio/` holds the UI.
+- **Auth for the SDK** resolves in this order, at call time, with no gating in the route: `CLAUDE_CODE_OAUTH_TOKEN`
+  env var → `ANTHROPIC_API_KEY` env var → **a Claude CLI session already logged into the host** (`claude login`
+  on the server). The last option lets a self-hosted deploy skip putting any key in `.env.local`, as long as
+  the server has an authenticated Claude CLI session.
+- `npm run init` asks for `ANTHROPIC_API_KEY` as an optional field (Enter to skip). Leaving it blank is fine
+  when one of the other two auth paths is available on the host.
 
 ## Core flows
 - **Auth**: per `auth.mode` — password (`/api/auth/password`, verifies `ACCESS_PASSWORD`) or

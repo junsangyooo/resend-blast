@@ -32,6 +32,9 @@ a Google Cloud OAuth client (only for Google login mode). Neither is needed for 
 
 - **Block composer** — Stack heading, paragraph, button, badge, numbered-list, agenda, grid, and image
   blocks. Colors, fonts, and spacing are locked by the design system, so emails are **always on-brand**.
+- **AI Studio** — Describe the email in plain language and Claude builds/edits it at `/studio`, streaming
+  changes into a live three-pane editor (chat · blocks · preview). Runs on the Claude Agent SDK; the model
+  is set in `brand.config` and auth needs no key when the host has a `claude login` session.
 - **Personalization** — `{{name}}` `{{firstName}}` `{{name|default}}` `{{email}}` substituted per
   recipient in both body and subject. Preview and live send share identical logic.
 - **Recipient lists** — Import from CSV/Excel (automatic header matching) or paste free text. Send

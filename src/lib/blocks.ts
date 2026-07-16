@@ -60,6 +60,7 @@ export type BlockType =
 export type GridCard = {
   title?: string;
   desc?: string;
+  descHtml?: string;
   img?: string;   // Azure Blob URL
   value?: string; // stat
   btn?: string;   // cta label
@@ -96,7 +97,7 @@ export type Block = {
   // numbered / agenda
   title?: string;
   titleNote?: string;
-  items?: { title: string; desc?: string }[];
+  items?: { title: string; desc?: string; descHtml?: string }[];
   rows?: { time: string; label: string }[];
   // image
   alt?: string;
@@ -171,15 +172,25 @@ function pickBrandColor(tag: string): string {
   const hex = m[1].toLowerCase();
   return BRAND_HEX.has(hex) ? hex : "";
 }
-/** Normalize text.html inline formatting to a whitelist (bold/italic/line break/brand-color span). */
+/** sanitizeInline-only escaper — preserves already-escaped entities so re-application is idempotent.
+ *  The global esc() is left as-is: plain-text fields (subject/heading) keep literal-escape semantics. */
+function escKeepEntities(s: string): string {
+  return s
+    .replace(/&(?!(?:amp|lt|gt|quot|#39|#\d{1,7}|#x[0-9a-fA-F]{1,6});)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+/** Normalize text.html inline formatting to a whitelist (bold/italic/underline/strike/line break/brand-color span). idempotent. */
 export function sanitizeInline(html: string): string {
   let out = "";
   let last = 0;
   const tagRe = /<\/?[a-zA-Z][^>]*>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(html))) {
-    // escape text before the tag
-    out += esc(html.slice(last, m.index));
+    // escape text before the tag (entities preserved — re-applying does not double-escape)
+    out += escKeepEntities(html.slice(last, m.index));
     last = m.index + m[0].length;
     const tag = m[0];
     const lower = tag.toLowerCase().replace(/\s+/g, "");
@@ -187,10 +198,15 @@ export function sanitizeInline(html: string): string {
     else if (lower === "</b>" || lower === "</strong>") out += "</strong>";
     else if (/^<(i|em)>$/.test(lower) || /^<(i|em)\b/.test(tag.toLowerCase())) out += "<em>";
     else if (lower === "</i>" || lower === "</em>") out += "</em>";
+    else if (/^<(u)>$/.test(lower) || /^<u\b/.test(tag.toLowerCase())) out += "<u>";
+    else if (lower === "</u>") out += "</u>";
+    else if (/^<(s|strike|del)>$/.test(lower) || /^<(s|strike|del)\b/.test(tag.toLowerCase())) out += "<s>";
+    else if (lower === "</s>" || lower === "</strike>" || lower === "</del>") out += "</s>";
     else if (/^<br\/?>$/.test(lower)) out += "<br>";
     else if (/^<a\b/.test(tag.toLowerCase())) {
       const hm = tag.match(/href\s*=\s*["']?([^"'\s>]+)/i);
-      const href = hm ? url(hm[1]) : "#";
+      // href is an attribute context and may have been &amp;-escaped by a prior pass — undo then re-escape (idempotent)
+      const href = hm ? url(hm[1].replace(/&amp;/g, "&")) : "#";
       out += `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:${TEAL}; text-decoration:underline;">`;
     } else if (lower === "</a>") out += "</a>";
     else if (/^<(span|font)\b/.test(tag.toLowerCase())) {
@@ -199,7 +215,7 @@ export function sanitizeInline(html: string): string {
     } else if (lower === "</span>" || lower === "</font>") out += "</span>";
     // other tags (div, p, script, …) are removed
   }
-  out += esc(html.slice(last));
+  out += escKeepEntities(html.slice(last));
   return out;
 }
 
@@ -306,7 +322,8 @@ function renderNumbered(b: Block, s: Resolved): string {
   const rows = items.map((it, i) => {
     const n = String(i + 1).padStart(2, "0");
     const last = i === items.length - 1;
-    const desc = it.desc?.trim() ? `<br><span style="color:${SUB}; font-size:13px;">${nl2br(it.desc)}</span>` : "";
+    const descInner = it.descHtml !== undefined ? sanitizeInline(it.descHtml) : it.desc?.trim() ? nl2br(it.desc) : "";
+    const desc = descInner ? `<br><span style="color:${SUB}; font-size:13px;">${descInner}</span>` : "";
     return `<tr><td style="padding:0 0 ${last ? "0" : "12px"} 0; vertical-align:top;">
       <table cellpadding="0" cellspacing="0" role="presentation"><tr>
         <td valign="top" width="28" style="color:${TEAL}; font-family:${MONO}; font-size:13px; font-weight:600; padding-top:1px;">${n}</td>
@@ -357,7 +374,8 @@ function gridCardHtml(b: Block, c: GridCard, align: Align): string {
     const img = c.img?.trim()
       ? `<img src="${url(c.img)}" alt="${esc(c.title ?? "")}" style="display:block; width:100%; height:auto; border-radius:8px; margin:0 0 11px; border:0;">`
       : "";
-    const desc = c.desc?.trim() ? `<p style="margin:0; color:${SUB}; font-size:12.5px; line-height:1.6;">${nl2br(c.desc)}</p>` : "";
+    const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+    const desc = descInner ? `<p style="margin:0; color:${SUB}; font-size:12.5px; line-height:1.6;">${descInner}</p>` : "";
     return `<div style="border:${border}; border-radius:12px; padding:${pad}; text-align:${align};">${img}${desc}</div>`;
   }
   if (t === "stat") {
@@ -367,7 +385,8 @@ function gridCardHtml(b: Block, c: GridCard, align: Align): string {
   }
   if (t === "cta") {
     const title = c.title?.trim() ? `<p style="margin:0; color:${INK}; font-size:15px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
-    const desc = c.desc?.trim() ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${nl2br(c.desc)}</p>` : "";
+    const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+    const desc = descInner ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${descInner}</p>` : "";
     const moreLabel = c.btn?.trim() || "자세히";
     const more = `<p style="margin:13px 0 0; color:${TEAL}; font-size:13px; font-weight:700; text-align:${align};">${esc(moreLabel)} &rarr;</p>`;
     const inner = `<div style="border:${border}; border-radius:12px; padding:${pad};">${title}${desc}${more}</div>`;
@@ -377,7 +396,8 @@ function gridCardHtml(b: Block, c: GridCard, align: Align): string {
   }
   // feature
   const title = c.title?.trim() ? `<p style="margin:0; color:${INK}; font-size:14.5px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
-  const desc = c.desc?.trim() ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${nl2br(c.desc)}</p>` : "";
+  const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+  const desc = descInner ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${descInner}</p>` : "";
   return `<div style="border:${border}; border-radius:12px; padding:${pad}; text-align:${align};">${title}${desc}</div>`;
 }
 function renderGrid(b: Block): string {
