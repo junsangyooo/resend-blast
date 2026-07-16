@@ -49,7 +49,7 @@ Edit `brand.config.ts` — company name, domains, design tokens, senders, and `a
 | `SENDER_POSTAL_ADDRESS` | external sends | ⚠️ legal requirement (physical address) |
 | `SENDER_ORG_NAME` / `SENDER_CONTACT_EMAIL` | optional | Compliance footer overrides |
 | `RESEND_WEBHOOK_SECRET` | optional | Persist open/click/bounce ([`resend.md`](resend.md)) |
-| `ANTHROPIC_API_KEY` | optional, reserved | For the **planned** AI Studio feature (not implemented yet — see `CLAUDE.md` → "AI Studio (planned)"). Safe to leave blank. |
+| `ANTHROPIC_API_KEY` | optional | Auth for AI Studio (see `CLAUDE.md` → "AI Studio"). Safe to leave blank when the host has a `claude login` session or `CLAUDE_CODE_OAUTH_TOKEN` set. |
 
 **Google OAuth** (google mode only): in the [Google Cloud Console](https://console.cloud.google.com),
 create an OAuth web client and add these Authorized redirect URIs:
