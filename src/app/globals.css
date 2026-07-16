@@ -104,3 +104,7 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* studio rich text */
+.rtField:empty::before { content: attr(data-ph); color: #9ca3af; pointer-events: none; }
+.rtField { outline: none; min-height: 1.4em; }
