@@ -16,7 +16,7 @@ function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
 }
 
 /**
- * List create/edit modal. Reused by both ListManager (management screen) and SendForm (inline quick add).
+ * List create/edit modal, opened from the send screen's list picker (both "새 리스트" and per-row edit).
  * Member input is unified through RecipientInput (grid paste + CSV).
  */
 export default function ListEditor({
@@ -30,7 +30,8 @@ export default function ListEditor({
   me: string | null;
   isAdmin?: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  /** Called after save/delete. On new creation, passes the created slug so the caller can select it immediately. */
+  onSaved: (created?: { slug: string }) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -92,6 +93,7 @@ export default function ListEditor({
   async function save() {
     setErr(""); setSaving(true);
     try {
+      let created: { slug: string } | undefined;
       if (slug) {
         const r = await fetch(`/api/lists/${encodeURIComponent(slug)}`, {
           method: "PATCH",
@@ -109,8 +111,9 @@ export default function ListEditor({
         });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error ?? "생성 실패");
+        if (j.list?.slug) created = { slug: j.list.slug };
       }
-      onSaved();
+      onSaved(created);
       onClose();
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");

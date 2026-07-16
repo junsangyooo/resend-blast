@@ -3,12 +3,12 @@
 @tailwind utilities;
 
 /* ── Theme tokens (RGB channels for /opacity 지원) ──
- * 화이트라벨: 앱 UI 브랜드 색은 아래 --brand / --brand-deep / --brand-mint / --rail
- * (light·dark 각각) 4개를 바꾸면 된다. 이메일 본문 색은 별도(brand.config.ts 의
+ * 화이트라벨: 앱 UI 브랜드 색은 아래 --brand / --brand-deep / --brand-mint
+ * (light·dark 각각) 3개를 바꾸면 된다. 이메일 본문 색은 별도(brand.config.ts 의
  * email.colors). UI 와 이메일 톤을 맞추려면 두 곳을 같은 값으로 둔다. (docs/WHITELABEL.md)
  */
 :root {
-  /* Light — ops console: 밝은 회색 캔버스 · 솔리드 틸 레일 · 민트 악센트 */
+  /* Light — ops console: 밝은 회색 캔버스 · 민트 악센트 */
   --bg: 240 242 245;
   --surface: 255 255 255;
   --surface2: 247 248 250;
@@ -18,7 +18,6 @@
   --brand: 17 158 135;        /* teal accent — 흰 배경에서 가독 */
   --brand-deep: 13 124 108;
   --brand-mint: 92 212 195;   /* CTA 그라데이션 밝은 쪽 */
-  --rail: 23 165 142;         /* 좌측 세로 레일 솔리드 틸 */
   --on-brand: 255 255 255;
   --ring: 17 158 135;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px rgb(16 24 40 / 0.06);
@@ -33,7 +32,6 @@
   --brand: 80 214 196;        /* mint — 어두운 배경에서 가독 */
   --brand-deep: 23 165 142;
   --brand-mint: 110 224 208;
-  --rail: 20 134 116;         /* 레일은 다크에서 살짝 딥하게 */
   --on-brand: 8 12 14;
   --ring: 80 214 196;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
@@ -90,18 +88,6 @@
   .tab-btn {
     @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted
            hover:text-text hover:bg-surface2 transition;
-  }
-  /* ── 좌측 세로 레일 ── */
-  .rail-btn {
-    @apply w-14 flex flex-col items-center gap-1 py-2.5 rounded-xl text-white/65
-           hover:text-white hover:bg-white/10 transition text-[10px] font-medium;
-  }
-  .rail-btn-active {
-    @apply text-white bg-white/15;
-  }
-  .rail-icon-btn {
-    @apply w-10 h-10 inline-flex items-center justify-center rounded-xl text-white/65
-           hover:text-white hover:bg-white/10 transition;
   }
   /* 수신자 숫자 카드 */
   .stat-box {

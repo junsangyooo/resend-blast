@@ -24,7 +24,7 @@ src/brand.config.ts      ★White-label single source (company name, domains, se
 scripts/init/            Init wizard (npm run init) — interactive setup generates src/brand.config.ts + .env.local
                          (Root holds only config: next.config.js, tsconfig.json, package.json, tailwind/postcss. App code lives under src/.)
 src/app/
-  page.tsx               Main (SendForm on the left / sliding TrackingSidebar on the right)
+  page.tsx               Main — top bar (brand + ProfileMenu) with SendForm filling the rest. No rail/sidebar; send history lives inside settings.
   login/page.tsx         Login screen (password or Google, per auth.mode)
   api/
     auth/google/         OAuth start + callback
@@ -42,23 +42,26 @@ src/app/
     admins/              Admin registry (read / add / delete all admins-only)
     suppression/         Unsubscribe / bounce list (read for everyone, removal admins-only)
 src/components/
-  SendForm.tsx           Email select · list select · ad-hoc · send (stepped UI, sender group · my sender name settings)
+  SendForm.tsx           Send screen — 3 steps (email / recipients / sender) each delegate their list UI to a popup so everything fits on one screen without scrolling. Right side is the preview canvas.
+  CreateEmailDialog.tsx  Step-1 "new email" entry popup — block composer (TemplateComposer) or upload (AddTemplateDialog)
+  EmailPickerDialog.tsx  Email picker popup — every email is always listed (no archive concept); delete is creator/admin only
+  ListSelectDialog.tsx   Recipient-list picker popup — checkbox multi-select + inline per-row edit/delete (replaces the old standalone list-management screen)
+  SenderDialog.tsx       Shared-sender picker popup (personal sending is the SendForm "내 계정으로" button instead)
+  AdhocDialog.tsx        Ad-hoc recipient popup wrapping RecipientInput — SendForm holds the text as the single source
   ConfirmSendModal.tsx   Final send confirm 3-pane (left summary / center per-recipient substituted preview / right recipient list)
-  TrackingSidebar.tsx    Send history cards (status distribution bar) + detail modal + live status lookup
+  TrackingSidebar.tsx    Send history cards (status distribution bar) + detail modal + live status lookup — embedded as the default tab inside AdminSettings (no longer a standalone sliding panel)
   TemplateComposer.tsx   Block assembler (canvas style shared with lib/blocks.ts — no duplicate implementation)
   AddTemplateDialog.tsx  Raw HTML input + simultaneous image upload (filename-matched src auto-substitution)
   RecipientInput.tsx     Shared recipient input (free-text live parsing + CSV/XLSX column mapping confirm + inline name editing)
-  ArchiveDialog.tsx      Archive (restore · permanent delete)
-  ListManager.tsx        List create · edit · import · delete
-  ListEditor.tsx         List edit modal (inline member name editing)
-  ListPicker.tsx         Multi-select lists on the send screen
-  AdminSettings.tsx      Settings (default tab unsubscribe/bounce; sender & admin tabs locked for non-admins)
+  ListEditor.tsx         List create/edit modal (inline member name editing); onSaved reports the created slug so the caller can auto-select it
+  AdminSettings.tsx      Settings — default tab is send history (embeds TrackingSidebar) + unsubscribe/bounce; sender & admin tabs locked for non-admins
   StatusGuide.tsx        One-line description per Resend status (Sent/Delivered/Bounced…)
-  ThemeToggle.tsx        Light / dark toggle
+  ProfileMenu.tsx        Top-bar avatar (Google photo, falls back to an initial letter in password mode) → dropdown (settings/theme/logout); replaces the old left rail
+  ThemeToggle.tsx        Light/dark toggle button; also exports the `useTheme()` hook (used by ProfileMenu)
 src/lib/
   blocks.ts              Block schema + renderTemplate (fixed design-system renderer) ★core. Colors, logos, socials read from brand.config
   personalize.ts         Personalization substitution ({{name}}/{{firstName}}/{{name|default}}/{{email}}) — shared client/server, no fs dependency
-  templates.ts           File-based email CRUD + spec save/render (saving a new same-name email without the overwrite flag → 409)
+  templates.ts           File-based email CRUD + spec save/render (saving a new same-name email without the overwrite flag → 409). No archive concept — every email is always listed; permanent delete only (creator/admin; legacy entries with no recorded creator require admin)
   lists.ts               Recipient list CRUD + source-preserving resolve
   send-log.ts            Send records (data/sends/*.json) + resendId index + stale cleanup
   logos.ts               Built-in + custom header logo registry (data/logos.json)
@@ -68,9 +71,9 @@ src/lib/
   atomic.ts              Atomic write + per-key serialization mutex + corrupt-JSON backup
   email-images.ts        CID inlining — rewrites image refs into inline attachments when assets.delivery = attach
   storage/               Image storage abstraction. index.ts = entrypoint + registry, image-validation.ts = magic-bytes validation (provider-agnostic), adapters/{local,azure}.ts = backends. Backend chosen via brand.config.assets.provider; credentials in .env
-  google.ts              OAuth helpers + domain validation + origin computation
-  session.ts             HS256 JWT sign/verify (Edge + Node compatible, Web Crypto)
-  auth.ts                currentUserEmail lookup via cookies() (for routes)
+  google.ts              OAuth helpers + domain validation + origin computation. IdInfo also carries the `profile` scope's name/picture claims, passed into the session for avatar display
+  session.ts             HS256 JWT sign/verify (Edge + Node compatible, Web Crypto). Payload carries an optional SessionProfile (name/picture) alongside email — not used for permission checks
+  auth.ts                currentUser() (email + display profile) / currentUserEmail() / requireUserEmail() via cookies() (for routes)
   recipients.ts          Email parse/dedupe + setNameInText (preview inline name editing)
   config.ts              Built-in From senders, REPLY_TO default, send cap (sync isAdmin is env-seed only — do not use; use admins.ts)
 src/middleware.ts        Session check (unauthenticated → /login). Static assets excluded via matcher.
@@ -104,6 +107,7 @@ Never hardcode values into code or docs (reference names only).
 | `R2_*` | Cloudflare R2 credentials (when `assets.provider = "r2"`) |
 | `AUTH_SESSION_SECRET` | Session JWT signing (= `JWT_SECRET`) |
 | `ADMIN_EMAILS` / `APP_BASE_URL` / `SENDER_*` | (Optional) admins · app URL · compliance. Defaults come from `brand.config.ts` |
+| `ANTHROPIC_API_KEY` | (Optional, reserved) Claude API key for the **planned** AI Studio feature — see "AI Studio (planned)" below. Not read by any code yet. |
 
 - **Auth mode, login domain, and sender domain are managed in `brand.config.ts`**
   (`auth.mode` / `auth.loginDomain` / `auth.senderDomain`), not in env. They are constants there
@@ -126,10 +130,28 @@ See `docs/images.md` for the full pipeline.
   - `attach` (default) — embedded as CID inline attachments via `lib/email-images.ts`.
   - `hosted` — referenced by public URL (uploaded through `/api/upload`).
 
+## AI Studio (planned)
+Not implemented yet — no `/studio` route, no `lib/ai/`, no chat UI exist in this repo. This section
+only documents the setting reserved for it, so `npm run init` can collect the key ahead of the feature
+landing (same pattern as the Resend key: optional, skippable).
+
+- Planned to run on `@anthropic-ai/claude-agent-sdk` (not `@anthropic-ai/sdk`) — a chat-driven block
+  composer that generates/edits `TemplateSpec` via an agent loop, not a single REST call.
+- Auth for the SDK, once wired up, resolves in this order: `CLAUDE_CODE_OAUTH_TOKEN` env var →
+  `ANTHROPIC_API_KEY` env var → **a Claude CLI session already logged into the host running this app**
+  (`claude login` on the server). The last option means a self-hosted deploy can skip putting any key in
+  `.env.local` at all, as long as the server itself has an authenticated Claude CLI session — useful for
+  operators who already run Claude Code on that box for other things.
+- `npm run init` asks for `ANTHROPIC_API_KEY` as an optional field (Enter to skip, same as the Resend
+  key) and writes it to `.env.local` when given. Leaving it blank is fine — the feature won't exist to
+  consume it until this section is replaced with a real implementation.
+
 ## Core flows
 - **Auth**: per `auth.mode` — password (`/api/auth/password`, verifies `ACCESS_PASSWORD`) or
   Google (`/api/auth/google` → Google with `hd=loginDomain` → callback domain check). Both issue an
-  HS256 JWT session cookie; middleware guards every path by checking the session.
+  HS256 JWT session cookie carrying a display profile (Google: name/picture from the id_token; password:
+  `brand.auth.operatorName`, no picture) for the top-bar `ProfileMenu` avatar; middleware guards every
+  path by checking the session.
 - **Email composition (blocks)**: arrange blocks in the UI → `/api/templates/render` for preview →
   `/api/templates/compose` to save `{name}.json` (spec) + `{name}.html` (rendered). Colors/fonts are
   fixed in `lib/blocks.ts`. Body width is spec.width (default 600 / wide 680). Saving a new same-name
@@ -149,7 +171,8 @@ See `docs/images.md` for the full pipeline.
   token-preserving HTML is substituted per recipient on the client) → 1:1 send via Resend → NDJSON stream
   reports progress/success/failure → records accumulate in `data/sends/{id}.json`. Sending continues even if
   the client disconnects, and results remain in the file.
-- **Tracking (history)**: `/api/sends` returns sends/*.json in reverse-chronological order. The sidebar polls
+- **Tracking (history)**: `/api/sends` returns sends/*.json in reverse-chronological order. Shown as the
+  default tab of the settings modal (`AdminSettings` → `TrackingSidebar`, opened from `ProfileMenu`), polling
   every 15s (only while open). The detail modal uses `?withStatus=1` to fetch live Resend status
   (delivered/opened/bounced…) with an N+1 fetch + 5s cache.
 - **Auto-cleanup**: on server boot (`instrumentation.ts`) and on `/api/sends` GET (5-minute throttle), stale

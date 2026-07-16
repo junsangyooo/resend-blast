@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useEscClose } from "./hooks";
+import TrackingSidebar, { type FollowupPayload } from "./TrackingSidebar";
 import { brand } from "@/brand.config";
 
 type Sender = { value: string; label: string; builtin?: boolean; scope?: "shared" | "personal"; owner?: string };
@@ -12,22 +13,25 @@ const REASON_LABEL: Record<string, string> = {
   unsubscribe: "수신거부", bounced: "반송", complained: "스팸신고", manual: "수동",
 };
 
-type Tab = "suppression" | "senders" | "admins";
+type Tab = "history" | "suppression" | "senders" | "admins";
 
 /**
- * Settings — unsubscribe/bounce (everyone) + sender management (admin) + admin management (admin).
+ * Settings — send history (default tab, everyone) + unsubscribe/bounce (everyone)
+ * + sender management (admin) + admin management (admin).
  * The sender/admin tabs are shown locked to non-admins and cannot be selected.
  * The server enforces permissions, so this UI is for convenience.
  */
 export default function AdminSettings({
-  open, isAdmin = false, onClose, onChanged,
+  open, isAdmin = false, onClose, onChanged, onFollowup,
 }: {
   open: boolean;
   isAdmin?: boolean;
   onClose: () => void;
   onChanged?: () => void;
+  /** Follow-up/resend clicked in send history — forwarded as a send-screen prefill. */
+  onFollowup?: (payload: FollowupPayload) => void;
 }) {
-  const [tab, setTab] = useState<Tab>("suppression");
+  const [tab, setTab] = useState<Tab>("history");
   const [senders, setSenders] = useState<Sender[]>([]);
   const [supps, setSupps] = useState<Suppression[]>([]);
   const [admins, setAdmins] = useState<AdminEntry[]>([]);
@@ -43,7 +47,7 @@ export default function AdminSettings({
   useEffect(() => {
     if (!open) return;
     setErr("");
-    setTab("suppression");
+    setTab("history");
     refresh();
     // isAdmin may arrive after the /api/config response, so include it in deps — refetch even if it becomes true late.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,6 +183,7 @@ export default function AdminSettings({
         </div>
 
         <div className="px-5 pt-3 flex gap-2 shrink-0">
+          {tabBtn("history", "발송 이력")}
           {tabBtn("suppression", `수신거부/반송 (${supps.length})`)}
           {isAdmin ? tabBtn("senders", `발신자 관리 (${sharedSenders.length})`) : lockedTabBtn("senders", "발신자 관리")}
           {isAdmin ? tabBtn("admins", `관리자 (${admins.length})`) : lockedTabBtn("admins", "관리자")}
@@ -186,6 +191,12 @@ export default function AdminSettings({
 
         {err && <div className="mx-5 mt-3 text-[12px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{err}</div>}
 
+        {tab === "history" ? (
+          // TrackingSidebar manages its own scrolling/polling — fill without a padded wrapper.
+          <div className="flex-1 min-h-0">
+            <TrackingSidebar active={open} reloadKey={0} onFollowup={onFollowup} />
+          </div>
+        ) : (
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {tab === "suppression" && (
             <>
@@ -303,6 +314,7 @@ export default function AdminSettings({
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   );

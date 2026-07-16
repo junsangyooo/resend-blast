@@ -316,6 +316,8 @@ async function main() {
   Object.assign(v, appTokensToValues(appTokensFor(themeId)));
   console.log(`  테마: ${getTheme(themeId).name}\n`);
 
+  v.anthropicApiKey = await ask("Claude API 키? (AI 스튜디오용, 아직 미구현 — 없으면 Enter)", "");
+
   if (await confirm("지금 발송도 설정할까요?", false)) {
     v.senderDomain = await askValid(
       "발송 도메인 (Resend 인증된 도메인)?",

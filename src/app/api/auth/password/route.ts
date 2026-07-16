@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: brand.ui.login.passwordError }, { status: 401 });
   }
 
-  const token = await createSession(brand.auth.operatorEmail);
+  const token = await createSession(brand.auth.operatorEmail, { name: brand.auth.operatorName });
   const res = NextResponse.json({ ok: true });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

@@ -2,7 +2,7 @@ import fs from "fs/promises";
 import path from "path";
 import { renderTemplate, migrateSpec, type TemplateSpec } from "./blocks";
 import { atomicWrite, withFileLock } from "./atomic";
-import { canManageAsync } from "./admins";
+import { canManageAsync, isAdminAsync } from "./admins";
 import { brand } from "../brand.config";
 
 const TEMPLATES_DIR = path.join(process.cwd(), "templates");
@@ -20,16 +20,16 @@ export type TemplateMeta = {
   description: string;
   size: number;
   composed: boolean; // whether it was built with the block composer and has a spec (json)
-  archived: boolean; // moved to the archive and hidden from the main list
   createdBy?: string;
   lastModifiedBy?: string;
   lastModifiedAt?: string;
 };
 
+// A leftover `archived` flag from the old archive feature may still exist in _meta.json,
+// but it's ignored now (all emails are always shown in the list).
 type MetaEntry = {
   subject?: string;
   description?: string;
-  archived?: boolean;
   createdBy?: string;
   lastModifiedBy?: string;
   lastModifiedAt?: string;
@@ -79,7 +79,6 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
       description: m.description ?? DEFAULT_DESCRIPTION,
       size: stat.size,
       composed: jsonNames.has(name),
-      archived: m.archived ?? false,
       createdBy: m.createdBy,
       lastModifiedBy: m.lastModifiedBy,
       lastModifiedAt: m.lastModifiedAt,
@@ -181,8 +180,6 @@ export async function saveComposedTemplate(
       ...prev,
       subject: spec.subject.trim(),
       description: description.trim(),
-      // Always activate on (re)save — prevents a leftover archived flag from hiding the new template
-      archived: false,
       createdBy: prev.createdBy ?? actorEmail,
       lastModifiedBy: actorEmail ?? prev.lastModifiedBy,
       lastModifiedAt: new Date().toISOString(),
@@ -212,8 +209,6 @@ export async function saveTemplate(
       ...prev,
       subject: subject.trim() || DEFAULT_SUBJECT,
       description: description.trim(),
-      // Always activate on (re)save — prevents a leftover archived flag from hiding the new template
-      archived: false,
       createdBy: prev.createdBy ?? actorEmail,
       lastModifiedBy: actorEmail ?? prev.lastModifiedBy,
       lastModifiedAt: new Date().toISOString(),
@@ -222,25 +217,15 @@ export async function saveTemplate(
   });
 }
 
-/** Archive toggle: only flips the archived flag in _meta.json (files are kept).
- *  Archive/restore is reversible so anyone can do it (only permanent delete is restricted to creator/admin). */
-export async function setArchived(name: string, archived: boolean, actorEmail?: string) {
-  if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
-  await mutateMeta((m) => {
-    m[name] = {
-      ...(m[name] ?? {}),
-      archived,
-      lastModifiedBy: actorEmail ?? m[name]?.lastModifiedBy,
-      lastModifiedAt: new Date().toISOString(),
-    };
-    return m;
-  });
-}
-
-/** Permanent delete: removes {name}.html + {name}.json + the _meta entry. Irreversible. Creator/admin only. */
+/** Permanent delete: removes {name}.html + {name}.json + the _meta entry. Irreversible.
+ *  Creator/admin only — legacy entries with no recorded creator require admin (avoids accidental deletion). */
 export async function deleteTemplate(name: string, actorEmail?: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
-  await assertCanManageTemplate(name, actorEmail);
+  const owner = (await readMeta())[name]?.createdBy;
+  const allowed = owner ? await canManageAsync(owner, actorEmail) : await isAdminAsync(actorEmail);
+  if (!allowed) {
+    throw new Error("이 이메일을 삭제할 권한이 없습니다 (만든 사람 또는 관리자만 가능).");
+  }
   await fs.unlink(path.join(TEMPLATES_DIR, `${name}.html`)).catch(() => {});
   await fs.unlink(path.join(TEMPLATES_DIR, `${name}.json`)).catch(() => {});
   await mutateMeta((m) => {

@@ -20,4 +20,12 @@ describe("renderEnv", () => {
     expect(out).not.toContain("GOOGLE_CLIENT_ID");
     expect(out.endsWith("\n")).toBe(true);
   });
+  it("includes anthropic key when given", () => {
+    const out = renderEnv({ mode: "password", accessPassword: "1234", anthropicApiKey: "sk-ant-x" }, "S");
+    expect(out).toContain("ANTHROPIC_API_KEY=sk-ant-x");
+  });
+  it("omits anthropic key when left blank", () => {
+    const out = renderEnv({ mode: "password", accessPassword: "1234" }, "S");
+    expect(out).not.toContain("ANTHROPIC_API_KEY");
+  });
 });

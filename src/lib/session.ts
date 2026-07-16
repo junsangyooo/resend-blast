@@ -6,7 +6,10 @@
 export const SESSION_COOKIE = "blast_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
-type Payload = { email: string; iat: number; exp: number };
+/** Display profile (Google avatar/name, or the password-mode operator name). Not used for permission checks (email only). */
+export type SessionProfile = { name?: string; picture?: string };
+
+type Payload = { email: string; iat: number; exp: number } & SessionProfile;
 
 function b64urlEncode(bytes: Uint8Array): string {
   let bin = "";
@@ -45,9 +48,15 @@ function secret(): string {
   return "dev-insecure-secret";
 }
 
-export async function createSession(email: string): Promise<string> {
+export async function createSession(email: string, profile: SessionProfile = {}): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: Payload = { email, iat: now, exp: now + SESSION_MAX_AGE };
+  const payload: Payload = {
+    email,
+    ...(profile.name ? { name: profile.name } : {}),
+    ...(profile.picture ? { picture: profile.picture } : {}),
+    iat: now,
+    exp: now + SESSION_MAX_AGE,
+  };
   const header = b64urlEncodeStr(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const body = b64urlEncodeStr(JSON.stringify(payload));
   const data = `${header}.${body}`;

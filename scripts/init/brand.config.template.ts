@@ -38,7 +38,7 @@ const CONTACT_EMAIL_DEFAULT  = "inquiry@example.com"; // @init
 /* ── App theme (overwritten by `npm run init` with a preset) ── @init:theme */
 const APP_ACCENT        = "#5b5bf0";   // → ui.appAccent       (--brand / --ring)
 const APP_ACCENT_BRIGHT = "#7c7cff";   // → ui.appAccentBright  (--brand-mint)
-const APP_ACCENT_DEEP   = "#4a4ad6";   // → ui.appAccentDeep    (--brand-deep / --rail)
+const APP_ACCENT_DEEP   = "#4a4ad6";   // → ui.appAccentDeep    (--brand-deep)
 
 /* ── Email colors (NOT touched by init; edit here for advanced personalization) ── */
 const EMAIL_PRIMARY     = "#5b5bf0";   // → email.colors.teal
@@ -187,7 +187,7 @@ export const brand = {
     /** App console (web UI) accent color — app/layout.tsx injects it as a :root CSS variable.
      *  Decoupled from email colors: APP_ACCENT* drives the UI; EMAIL_* drives email bodies. */
     appAccent: APP_ACCENT,             // → --brand / --ring
-    appAccentDeep: APP_ACCENT_DEEP,    // → --brand-deep / --rail
+    appAccentDeep: APP_ACCENT_DEEP,    // → --brand-deep
     appAccentBright: APP_ACCENT_BRIGHT,// → --brand-mint (lighter end of the CTA gradient)
     login: {
       title: `${COMPANY} Email Blast`,

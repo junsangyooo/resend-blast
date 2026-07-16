@@ -21,12 +21,12 @@
   .win{height:100%;background:#fff;border:1px solid #e3e5ec;border-radius:9px;overflow:hidden;display:flex;flex-direction:column}
   .bar{height:18px;background:#f3f4f7;border-bottom:1px solid #eaebf0;display:flex;align-items:center;gap:5px;padding:0 8px}
   .bar i{width:7px;height:7px;border-radius:50%;background:#d4d6dd}
-  .body{flex:1;display:flex;min-height:0}
-  .rail{width:42px;background:var(--d);display:flex;flex-direction:column;align-items:center;padding-top:9px;gap:9px}
-  .rail .lg{width:18px;height:18px;border-radius:6px;background:#fff}
-  .rail .ic{width:18px;height:18px;border-radius:5px;background:rgba(255,255,255,.28)}
-  .rail .ic.on{background:rgba(255,255,255,.95)}
-  .main{flex:1;padding:11px 12px;min-width:0}
+  .topbar{height:20px;flex-shrink:0;background:var(--d);display:flex;align-items:center;justify-content:space-between;padding:0 10px}
+  .topbar .brandline{display:flex;align-items:center;gap:6px}
+  .topbar .lg{width:11px;height:11px;border-radius:4px;background:#fff}
+  .topbar .word2{height:6px;width:42px;border-radius:3px;background:rgba(255,255,255,.85)}
+  .topbar .avatar{width:12px;height:12px;border-radius:50%;background:rgba(255,255,255,.9)}
+  .main{flex:1;display:flex;flex-direction:column;padding:11px 12px;min-width:0;min-height:0}
   .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px}
   .word{height:9px;width:64px;border-radius:4px;background:var(--a)}
   .btn{font-size:8px;font-weight:700;color:#fff;padding:5px 10px;border-radius:6px;background:linear-gradient(135deg,var(--c),var(--a))}
@@ -69,11 +69,11 @@
     el.style.setProperty("--d", t.deep);   el.style.setProperty("--t", t.tint);
     el.innerHTML =
       '<div class="console"><div class="win"><div class="bar"><i></i><i></i><i></i></div>'+
-      '<div class="body"><div class="rail"><div class="lg"></div><div class="ic on"></div><div class="ic"></div><div class="ic"></div></div>'+
+      '<div class="topbar"><div class="brandline"><div class="lg"></div><div class="word2"></div></div><div class="avatar"></div></div>'+
       '<div class="main"><div class="top"><div class="word"></div><div class="btn">보내기</div></div>'+
       '<div class="tabs"><div class="tab on"></div><div class="tab"></div><div class="tab"></div></div>'+
       '<div class="rows"><div class="r"></div><div class="r"></div><div class="r"></div></div>'+
-      '<div class="chips"><div class="badge">발송됨</div><div class="stat">128</div></div></div></div></div></div>'+
+      '<div class="chips"><div class="badge">발송됨</div><div class="stat">128</div></div></div></div></div>'+
       '<div class="meta"><div class="mtop"><h3>'+t.name+'</h3><div class="sw">'+
       '<div style="background:'+t.accent+'"></div><div style="background:'+t.cta+'"></div><div style="background:'+t.deep+'"></div>'+
       '</div></div><div class="vibe">'+t.vibe+'</div></div>';

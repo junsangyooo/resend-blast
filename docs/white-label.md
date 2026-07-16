@@ -187,9 +187,8 @@ the email and the app UI share the same palette from a single place:
 
 ```
 --brand        /* accent (buttons, tabs, highlights) — from PRIMARY */
---brand-deep   /* deep accent / left rail — from PRIMARY_DEEP */
+--brand-deep   /* deep accent (hover/active states, avatar gradient) — from PRIMARY_DEEP */
 --brand-mint   /* CTA gradient bright end — from PRIMARY_CTA */
---rail         /* left vertical rail */
 ```
 
 Change the design tokens once and both the email tone and the app UI update together — no separate

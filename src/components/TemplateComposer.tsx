@@ -133,7 +133,7 @@ function Editable({ value, html, onCommit, onLive, ph, style, className, onSelec
 }
 
 export default function TemplateComposer({ open, editName, onClose, onSaved }: {
-  open: boolean; editName?: string | null; onClose: () => void; onSaved: () => void;
+  open: boolean; editName?: string | null; onClose: () => void; onSaved: (savedName?: string) => void;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -150,7 +150,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
   const [logos, setLogos] = useState<Logo[]>([]);
-  const [existing, setExisting] = useState<{ name: string; archived: boolean }[]>([]);
+  const [existing, setExisting] = useState<{ name: string }[]>([]);
   const [undoBlk, setUndoBlk] = useState<{ block: Block; idx: number } | null>(null);
   const rtRef = useRef<HTMLDivElement>(null);
   const rtTargetId = useRef<string | null>(null);
@@ -168,7 +168,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   useEffect(() => {
     if (!open) return;
     setErr(""); setSel(null); setInsMode("mail"); setAddAt(null); setPreview(false); setDrag(null);
-    fetch("/api/templates").then((r) => r.json()).then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name, archived: t.archived })))).catch(() => {});
+    fetch("/api/templates").then((r) => r.json()).then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name })))).catch(() => {});
     fetch("/api/logos").then((r) => r.json()).then((j) => setLogos(j.logos ?? [])).catch(() => {});
     if (editName) {
       setStarted(true); // editing an existing email goes straight to the editor, skipping the start screen
@@ -396,7 +396,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
   const trimmed = name.trim();
   const dup = !editName && trimmed ? existing.find((t) => t.name === trimmed) : null;
   const nameInvalid = trimmed && !/^[A-Za-z0-9_-]+$/.test(trimmed);
-  const nameError = nameInvalid ? "영문/숫자/하이픈/언더스코어만 사용 가능합니다" : dup ? `이미 같은 이름의 이메일이 있습니다${dup.archived ? " (보관함)" : ""}` : "";
+  const nameError = nameInvalid ? "영문/숫자/하이픈/언더스코어만 사용 가능합니다" : dup ? "이미 같은 이름의 이메일이 있습니다" : "";
   async function save() {
     setErr("");
     await flushEdits();
@@ -414,7 +414,7 @@ export default function TemplateComposer({ open, editName, onClose, onSaved }: {
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error ?? "저장 실패");
-      onSaved(); onClose();
+      onSaved(name.trim()); onClose();
     } catch (e: any) { setErr(e?.message ?? "저장 실패"); } finally { setSaving(false); }
   }
 

@@ -3,15 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AddTemplateDialog from "./AddTemplateDialog";
 import TemplateComposer from "./TemplateComposer";
-import ListPicker from "./ListPicker";
+import CreateEmailDialog from "./CreateEmailDialog";
+import EmailPickerDialog, { type PickerTemplate } from "./EmailPickerDialog";
+import ListSelectDialog, { type ListRow } from "./ListSelectDialog";
+import SenderDialog from "./SenderDialog";
+import AdhocDialog from "./AdhocDialog";
 import ListEditor from "./ListEditor";
-import RecipientInput from "./RecipientInput";
 import ConfirmSendModal from "./ConfirmSendModal";
-import type { ComposerState } from "@/app/page";
-import type { Recipient } from "@/lib/recipients";
+import { parseRecipientGrid } from "@/lib/recipients";
 import { brand } from "@/brand.config";
-
-type Template = { name: string; subject: string; description: string; size: number; composed: boolean; archived: boolean };
 
 type FromOption = { value: string; label: string; builtin?: boolean; scope?: "shared" | "personal"; owner?: string };
 
@@ -34,31 +34,26 @@ export type SendPrefill = {
 } | null;
 
 type Props = {
-  composer: ComposerState;
-  setComposer: (s: ComposerState) => void;
-  showAddHtml: boolean;
-  setShowAddHtml: (v: boolean) => void;
-  reloadKey: number;
-  listsReloadKey: number;
-  onTemplatesChanged: () => void;
-  openListManager: () => void;
-  onListsChanged: () => void;
   prefill?: SendPrefill;
   configReloadKey?: number;
 };
 
-export default function SendForm({
-  composer, setComposer, showAddHtml, setShowAddHtml,
-  reloadKey, listsReloadKey, onTemplatesChanged, openListManager, onListsChanged, prefill, configReloadKey = 0,
-}: Props) {
-  const [templates, setTemplates] = useState<Template[]>([]);
+/**
+ * Send screen — the left 3 steps delegate their lists to popups so everything fits on
+ * one screen without scrolling.
+ * ① Email: create (block composer / upload popup) or pick from the list (everyone sees
+ *    everything, only the creator can delete)
+ * ② Recipients: create/select a list (popup: multi-select + inline edit/delete) + ad-hoc (popup)
+ * ③ Sender: my account / shared sender (popup) + Reply-To · ad flag
+ */
+export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
+  const [templates, setTemplates] = useState<PickerTemplate[]>([]);
   const [selected, setSelected] = useState<string>("");
+  const [lists, setLists] = useState<ListRow[]>([]);
 
   const [selectedListSlugs, setSelectedListSlugs] = useState<string[]>([]);
   const [listMembersPreview, setListMembersPreview] = useState<{ email: string; name?: string; listSlug: string }[]>([]);
   const [adhoc, setAdhoc] = useState("");
-  const [adhocRows, setAdhocRows] = useState<Recipient[]>([]);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const [fromOptions, setFromOptions] = useState<FromOption[]>([]);
   const [from, setFrom] = useState<string>("");
@@ -69,6 +64,7 @@ export default function SendForm({
   const [isAd, setIsAd] = useState(false);
   const [forceNextSend, setForceNextSend] = useState(false); // bypass idempotency once on resend prefill
   const [me, setMe] = useState<string>("");
+  const [isAdmin, setIsAdmin] = useState(false);
   const [maxRecipients, setMaxRecipients] = useState<number>(1000);
 
   const [sending, setSending] = useState(false);
@@ -77,12 +73,21 @@ export default function SendForm({
   const [currentSendId, setCurrentSendId] = useState<string | null>(null);
   const [aborting, setAborting] = useState(false);
   const [notice, setNotice] = useState<string>("");
-  const [archivingNames, setArchivingNames] = useState<Set<string>>(new Set());
+
+  // Popup state — every step's list/input UI is delegated to a popup.
+  const [createOpen, setCreateOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [composer, setComposer] = useState<{ open: boolean; editName: string | null }>({ open: false, editName: null });
   const [htmlEditName, setHtmlEditName] = useState<string | null>(null);
-  const [tmplQuery, setTmplQuery] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [listSelectOpen, setListSelectOpen] = useState(false);
+  const [listEditor, setListEditor] = useState<{ slug: string | null } | null>(null);
+  const [adhocOpen, setAdhocOpen] = useState(false);
+  const [senderOpen, setSenderOpen] = useState(false);
+
   const resultRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { loadTemplates(); }, [reloadKey]);
+  useEffect(() => { loadTemplates(); loadLists(); }, []);
   useEffect(() => { loadConfig(); }, [configReloadKey]);
 
   // Apply prefill passed in from follow-up/resend, etc.
@@ -113,10 +118,17 @@ export default function SendForm({
     const r = await fetch("/api/templates");
     if (r.status === 401) { location.href = "/login"; return; }
     const j = await r.json();
-    const list: Template[] = j.templates || [];
+    const list: PickerTemplate[] = j.templates || [];
     setTemplates(list);
-    const firstVisible = list.find((t) => !t.archived)?.name ?? "";
-    setSelected((cur) => (cur && list.some((t) => t.name === cur && !t.archived) ? cur : firstVisible));
+    // If the selected email was deleted, clear it (no auto-select — selection is always explicit).
+    setSelected((cur) => (cur && list.some((t) => t.name === cur) ? cur : ""));
+  }
+
+  async function loadLists() {
+    const r = await fetch("/api/lists");
+    if (!r.ok) return;
+    const j = await r.json();
+    setLists(j.lists ?? []);
   }
 
   async function loadConfig() {
@@ -129,8 +141,8 @@ export default function SendForm({
     // Keep the current selection if still valid (preserved even when an admin adds/removes senders), otherwise use the default.
     setFrom((cur) => (cur && opts.some((o) => o.value === cur) ? cur : (j.fromDefault ?? "")));
     setMe(j.me ?? "");
+    setIsAdmin(!!j.isAdmin);
     setMaxRecipients(j.maxRecipients ?? 1000);
-    return opts;
   }
 
   // Safety net: correct the `from` if one passed in via prefill (resend inheritance) etc. is no longer usable.
@@ -177,28 +189,15 @@ export default function SendForm({
     }
   }
 
-  function archiveImmediate(name: string) {
-    if (archivingNames.has(name)) return;
-    setArchivingNames((prev) => new Set(prev).add(name));
-    setTimeout(async () => {
-      try {
-        await fetch("/api/templates", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, archived: true }),
-        });
-      } finally {
-        onTemplatesChanged();
-        setArchivingNames((prev) => { const next = new Set(prev); next.delete(name); return next; });
-      }
-    }, 250);
+  // Edit an email — composed (block) ones go to the block composer, raw-HTML ones to AddTemplateDialog.
+  function editTemplate(name: string) {
+    const t = templates.find((x) => x.name === name);
+    if (t?.composed) setComposer({ open: true, editName: name });
+    else setHtmlEditName(name);
   }
 
-  function editTemplate(t: Template) {
-    if (t.composed) setComposer({ open: true, editName: t.name });
-    else setHtmlEditName(t.name);
-  }
-
+  // Member preview for the selected lists — preserves selection order (same address in multiple
+  // lists keeps the first-selected list's name).
   useEffect(() => {
     if (selectedListSlugs.length === 0) { setListMembersPreview([]); return; }
     let cancel = false;
@@ -214,9 +213,13 @@ export default function SendForm({
       if (!cancel) setListMembersPreview(collected);
     })();
     return () => { cancel = true; };
-  }, [selectedListSlugs, listsReloadKey]);
+  }, [selectedListSlugs, lists]);
 
   const tmplObj = templates.find((t) => t.name === selected);
+
+  // Ad-hoc text is the single source — parsed straight from it even while the popup is closed
+  // (e.g. resend prefill) so the row count is always current.
+  const adhocRows = useMemo(() => parseRecipientGrid(adhoc).rows, [adhoc]);
 
   const mergedRecipients = useMemo(() => {
     const seen = new Set<string>();
@@ -235,6 +238,12 @@ export default function SendForm({
     }
     return out;
   }, [listMembersPreview, adhocRows]);
+
+  // Deduped member count for the lists alone (for the list-picker popup's summary).
+  const listUniqueCount = useMemo(
+    () => new Set(listMembersPreview.map((m) => m.email.toLowerCase())).size,
+    [listMembersPreview]
+  );
 
   const validCount = mergedRecipients.length;
   const overCap = validCount > maxRecipients;
@@ -322,81 +331,80 @@ export default function SendForm({
   const doneEv = events.find((e) => e.type === "done") as Extract<SendEvent, { type: "done" }> | undefined;
   const progressPct = total > 0 ? Math.round((processed / total) * 100) : 0;
   const previewUrl = selected ? `/api/templates?preview=${selected}` : "";
-  const visible = templates.filter((t) => !t.archived);
-  const shownTemplates = tmplQuery.trim()
-    ? visible.filter((t) => `${t.name} ${t.subject} ${t.description}`.toLowerCase().includes(tmplQuery.toLowerCase()))
-    : visible;
 
-  const selectedListNames = listMembersPreview.length > 0
-    ? Array.from(new Set(listMembersPreview.map((m) => m.listSlug)))
-    : [];
+  const selectedLists = selectedListSlugs
+    .map((slug) => lists.find((l) => l.slug === slug))
+    .filter((l): l is ListRow => !!l);
+  const selectedListNames = selectedLists.map((l) => l.name);
+
+  const sharedOptions = fromOptions.filter((o) => o.scope !== "personal");
+  const myOption = fromOptions.find((o) => o.scope === "personal");
+  const isPersonalFrom = fromOptions.find((o) => o.value === from)?.scope === "personal";
+  const fromDisplayName = from.match(/^(.*?)\s*</)?.[1]?.trim() || from;
+
+  function clearAdhoc() {
+    setAdhoc("");
+  }
+
+  const segActive = "btn text-xs justify-center py-2 border border-brand bg-brand/10 text-brand";
+  const segIdle = "btn-ghost text-xs justify-center py-2";
 
   return (
-    <div className="h-full grid grid-cols-1 lg:grid-cols-[400px_minmax(0,1fr)]">
-      {/* ─────────── LEFT: controls ─────────── */}
-      <div className="overflow-y-auto lg:border-r border-border p-6 space-y-8 bg-surface">
-        {/* ① Template */}
-        <section className="space-y-3">
+    <div className="h-full grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] card overflow-hidden">
+      {/* ─────────── LEFT: 3 steps — fits on one screen without scrolling ─────────── */}
+      <div className="lg:border-r border-border bg-surface p-5 flex flex-col gap-6 overflow-y-auto">
+        {/* ① Email */}
+        <section className="space-y-2.5">
           <StepHead n={1} title="이메일 선택" />
-          {visible.length > 6 && (
-            <input
-              className="input py-1.5 text-[12px]"
-              value={tmplQuery}
-              onChange={(e) => setTmplQuery(e.target.value)}
-              placeholder="🔍 이메일 검색 (이름·제목·설명)"
-            />
-          )}
-          <div className="max-h-[32vh] overflow-y-auto pr-0.5 no-scrollbar">
-            {shownTemplates.map((t) => {
-              const active = t.name === selected;
-              const isArchiving = archivingNames.has(t.name);
-              return (
-                <div
-                  key={t.name}
-                  className={`relative group overflow-hidden transition-all ${
-                    isArchiving ? "opacity-0 translate-x-8 max-h-0 mb-0 pointer-events-none" : "opacity-100 translate-x-0 max-h-[240px] mb-2.5"
-                  }`}
-                  style={{ transitionDuration: "250ms" }}
-                >
-                  <button
-                    onClick={() => setSelected(t.name)}
-                    className={`w-full text-left rounded-xl border p-3.5 pr-[68px] transition ${
-                      active ? "border-brand bg-brand/5 ring-1 ring-brand/30" : "border-border hover:border-brand/40 bg-surface"
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-[12px] text-text/90 truncate">{t.name}</span>
-                      {t.composed && <span className="chip shrink-0">블록</span>}
-                    </div>
-                    <div className="text-[12px] text-text/70 mt-1.5 truncate">{t.subject}</div>
-                    {t.description && <div className="text-[11px] text-muted mt-0.5 truncate">{t.description}</div>}
-                  </button>
-                  <div className="absolute top-2 right-2 flex items-center gap-0.5">
-                    <button onClick={(e) => { e.stopPropagation(); editTemplate(t); }} title={t.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"} className="icon-btn text-muted/60 hover:text-brand focus:text-brand"><EditIcon /></button>
-                    <button onClick={(e) => { e.stopPropagation(); archiveImmediate(t.name); }} title="보관함으로 이동 (복원 가능)" className="icon-btn text-muted/60 hover:text-red-500 focus:text-red-500"><ArchiveIcon /></button>
-                  </div>
-                </div>
-              );
-            })}
-            {visible.length === 0 && (
-              <div className="text-[12px] text-muted py-6 px-4 text-center border border-dashed border-border rounded-xl space-y-2">
-                <div className="text-text/80 font-semibold">처음이신가요?</div>
-                <div className="leading-relaxed">
-                  ① 왼쪽 <span className="text-brand">이메일</span>에서 “블록으로 만들기”로 메일을 만들고<br />
-                  ② <span className="text-brand">리스트</span>에서 수신자를 추가한 뒤<br />
-                  ③ 여기서 발송하세요.
-                </div>
-                <div className="text-[11px]">먼저 <span className="text-brand">✉ 나에게 테스트</span>로 본인에게 보내 확인하는 걸 권장합니다.</div>
-              </div>
-            )}
-            {visible.length > 0 && shownTemplates.length === 0 && (
-              <div className="text-xs text-muted py-6 text-center">‘{tmplQuery}’ 검색 결과가 없습니다.</div>
-            )}
+          <p className="text-[11px] text-muted truncate">
+            💡 팀원이 만든 이메일까지 모두 목록에 보여요 · 삭제는 만든 사람만
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCreateOpen(true)} className="btn-ghost text-xs justify-center py-2">
+              ＋ 새로 만들기
+            </button>
+            <button
+              onClick={() => { loadTemplates(); setPickerOpen(true); }}
+              className="btn-ghost text-xs justify-center py-2"
+            >
+              목록에서 선택{templates.length > 0 && ` (${templates.length})`}
+            </button>
           </div>
+          {tmplObj ? (
+            <div className="relative rounded-xl border border-brand bg-brand/5 ring-1 ring-brand/30">
+              <button onClick={() => setPickerOpen(true)} className="w-full text-left p-3 pr-10" title="다른 이메일 선택">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[12px] text-text/90 truncate">{tmplObj.name}</span>
+                  {tmplObj.composed && <span className="chip shrink-0">블록</span>}
+                </div>
+                <div className="text-[12px] text-text/70 mt-1 truncate">{tmplObj.subject}</div>
+              </button>
+              <button
+                onClick={() => editTemplate(tmplObj.name)}
+                title={tmplObj.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"}
+                className="icon-btn absolute top-2.5 right-2 text-muted/60 hover:text-brand"
+              >
+                <EditIcon />
+              </button>
+            </div>
+          ) : templates.length === 0 ? (
+            <div className="text-[12px] text-muted py-4 px-4 text-center border border-dashed border-border rounded-xl leading-relaxed">
+              <span className="text-text/80 font-semibold">처음이신가요?</span>{" "}
+              <span className="text-brand">새로 만들기</span>로 첫 이메일을 만든 뒤 수신자를 정해 발송하세요.
+              먼저 ✉ 나에게 테스트를 권장합니다.
+            </div>
+          ) : (
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="w-full text-[12px] text-muted py-4 text-center border border-dashed border-border rounded-xl hover:border-brand/40 hover:text-text transition"
+            >
+              아직 선택된 이메일이 없습니다 — 목록에서 선택하세요
+            </button>
+          )}
         </section>
 
         {/* ② Recipients */}
-        <section className="space-y-3">
+        <section className="space-y-2.5">
           <div className="flex items-center justify-between gap-2">
             <StepHead n={2} title="수신자" />
             {validCount > 0 && (
@@ -405,68 +413,122 @@ export default function SendForm({
               </span>
             )}
           </div>
-          <ListPicker
-            selected={selectedListSlugs}
-            onChange={setSelectedListSlugs}
-            reloadKey={listsReloadKey}
-            onManage={openListManager}
-            onQuickAdd={() => setQuickAddOpen(true)}
-          />
-
-          <RecipientInput label="직접 입력 (이름 + 이메일)" value={adhoc} onTextChange={setAdhoc} onChange={setAdhocRows} />
-        </section>
-
-        {/* ③ Send options */}
-        <section className="space-y-3">
-          <StepHead n={3} title="발신 옵션" />
-          <div>
-            <label className="block text-[11px] text-muted mb-1">발신자 (From)</label>
-            <select className="input" value={from} onChange={(e) => setFrom(e.target.value)}>
-              <optgroup label="공용">
-                {fromOptions.filter((o) => o.scope !== "personal").map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-              </optgroup>
-              <optgroup label="내 계정">
-                {fromOptions.filter((o) => o.scope === "personal").map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
-              </optgroup>
-            </select>
-            {fromOptions.find((o) => o.value === from)?.scope === "personal" && (
-              <div className="mt-1.5 text-[11px] text-muted">
-                {myNickEditing ? (
-                  <span className="flex items-center gap-1.5">
-                    <input
-                      autoFocus
-                      className="input py-1 text-[12px] flex-1"
-                      value={myNick}
-                      onChange={(e) => setMyNick(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") saveMyFromName(); if (e.key === "Escape") setMyNickEditing(false); }}
-                      placeholder="수신자에게 보일 이름"
-                    />
-                    <button type="button" onClick={saveMyFromName} className="chip hover:border-brand/40 shrink-0">저장</button>
-                    <button type="button" onClick={() => setMyNickEditing(false)} className="chip shrink-0">취소</button>
-                  </span>
-                ) : (
-                  <span>
-                    수신자에게 <span className="font-mono text-text/80">{from.match(/^(.*?)\s*</)?.[1] || from}</span> 으로 표시됩니다.{" "}
-                    <button
-                      type="button"
-                      className="text-brand hover:underline"
-                      onClick={() => { setMyNick(from.match(/^(.*?)\s*</)?.[1] ?? ""); setMyNickEditing(true); }}
-                    >
-                      ✎ 이름 변경
-                    </button>
-                  </span>
-                )}
-              </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setListEditor({ slug: null })} className="btn-ghost text-xs justify-center py-2">
+              ＋ 리스트 만들기
+            </button>
+            <button
+              onClick={() => { loadLists(); setListSelectOpen(true); }}
+              className="btn-ghost text-xs justify-center py-2"
+            >
+              리스트 선택{selectedListSlugs.length > 0 && ` (${selectedListSlugs.length})`}
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {selectedLists.map((l) => (
+              <span key={l.slug} className="chip">
+                <span className="truncate max-w-[120px]">{l.name}</span>
+                <span className="text-muted tabular-nums">{l.memberCount}</span>
+                <button
+                  onClick={() => setSelectedListSlugs((cur) => cur.filter((s) => s !== l.slug))}
+                  className="text-muted hover:text-red-500"
+                  title="선택 해제"
+                >✕</button>
+              </span>
+            ))}
+            {adhocRows.length > 0 ? (
+              <span className="chip border-brand/40">
+                <button onClick={() => setAdhocOpen(true)} className="hover:text-brand" title="직접 입력 수정">
+                  ✎ 직접 입력 {adhocRows.length}명
+                </button>
+                <button onClick={clearAdhoc} className="text-muted hover:text-red-500" title="직접 입력 비우기">✕</button>
+              </span>
+            ) : (
+              <button
+                onClick={() => setAdhocOpen(true)}
+                className="chip border-dashed text-muted hover:text-brand hover:border-brand/40 transition"
+              >
+                ＋ 직접 입력
+              </button>
             )}
           </div>
-          <div>
-            <label className="block text-[11px] text-muted mb-1">답장 받을 주소 (Reply-To)</label>
-            <input className="input text-[13px]" value={replyTo} onChange={(e) => setReplyTo(e.target.value)} placeholder="비우면 발신자 주소로 회신" />
-            <p className="mt-1 text-[10px] text-muted">비우면 회신이 <span className="font-mono">{from || "발신자"}</span> 주소로 갑니다. @{brand.auth.senderDomain} 주소만 허용.</p>
+        </section>
+
+        {/* ③ Sender options */}
+        <section className="space-y-2.5">
+          <StepHead n={3} title="발신 옵션" />
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { if (myOption) setFrom(myOption.value); }}
+              disabled={!myOption}
+              className={isPersonalFrom ? segActive : segIdle}
+              title={me ? `${me} 주소로 발송` : "로그인 정보 확인 중"}
+            >
+              내 계정으로
+            </button>
+            <button
+              onClick={() => setSenderOpen(true)}
+              className={!isPersonalFrom ? segActive : segIdle}
+              title="공용 발신자 선택"
+            >
+              공용 발신자로
+            </button>
           </div>
-          <label className="flex items-start gap-2 text-[12px] text-text/80 cursor-pointer">
-            <input type="checkbox" className="mt-0.5" checked={isAd} onChange={(e) => setIsAd(e.target.checked)} />
-            <span>광고성 메일 (제목에 <span className="font-mono">(광고)</span> 자동 표기 · 정보통신망법). 외부 수신자 대상 홍보·행사 초청이면 체크.</span>
+
+          <div className="rounded-lg border border-border bg-surface2/40 px-3 py-2 text-[12px]">
+            {isPersonalFrom ? (
+              myNickEditing ? (
+                <span className="flex items-center gap-1.5">
+                  <input
+                    autoFocus
+                    className="input py-1 text-[12px] flex-1"
+                    value={myNick}
+                    onChange={(e) => setMyNick(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveMyFromName(); if (e.key === "Escape") setMyNickEditing(false); }}
+                    placeholder="수신자에게 보일 이름"
+                  />
+                  <button type="button" onClick={saveMyFromName} className="chip hover:border-brand/40 shrink-0">저장</button>
+                  <button type="button" onClick={() => setMyNickEditing(false)} className="chip shrink-0">취소</button>
+                </span>
+              ) : (
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate">
+                    <b className="text-text/90">{fromDisplayName}</b>
+                    <span className="font-mono text-muted"> &lt;{me}&gt;</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-brand hover:underline shrink-0"
+                    onClick={() => { setMyNick(fromDisplayName === from ? "" : fromDisplayName); setMyNickEditing(true); }}
+                  >
+                    ✎ 이름 변경
+                  </button>
+                </span>
+              )
+            ) : (
+              <span className="flex items-center justify-between gap-2">
+                <span className="font-mono truncate" title={from}>{from || "발신자를 선택하세요"}</span>
+                <button type="button" onClick={() => setSenderOpen(true)} className="text-brand hover:underline shrink-0">변경</button>
+              </span>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[11px] text-muted mb-1">답장 받을 주소 (@{brand.auth.senderDomain})</label>
+            <input
+              className="input py-1.5 text-[13px]"
+              value={replyTo}
+              onChange={(e) => setReplyTo(e.target.value)}
+              placeholder="비우면 발신자 주소로 회신"
+            />
+          </div>
+
+          <label
+            className="flex items-center gap-2 text-[12px] text-text/80 cursor-pointer"
+            title="제목에 (광고) 자동 표기 (정보통신망법). 외부 수신자 대상 홍보·행사 초청이면 체크."
+          >
+            <input type="checkbox" checked={isAd} onChange={(e) => setIsAd(e.target.checked)} />
+            <span className="truncate">광고성 메일 (제목에 자동 표기)</span>
           </label>
         </section>
       </div>
@@ -588,17 +650,85 @@ export default function SendForm({
         )}
       </div>
 
-      <AddTemplateDialog open={showAddHtml || !!htmlEditName} editName={htmlEditName} onClose={() => { setShowAddHtml(false); setHtmlEditName(null); }} onSaved={loadTemplates} />
-      <TemplateComposer open={composer.open} editName={composer.editName} onClose={() => setComposer({ open: false, editName: null })} onSaved={() => loadTemplates()} />
+      {/* ─────────── popups ─────────── */}
+      <CreateEmailDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreate={() => { setCreateOpen(false); setComposer({ open: true, editName: null }); }}
+        onUpload={() => { setCreateOpen(false); setUploadOpen(true); }}
+      />
 
-      {quickAddOpen && (
+      <AddTemplateDialog
+        open={uploadOpen || !!htmlEditName}
+        editName={htmlEditName}
+        onClose={() => { setUploadOpen(false); setHtmlEditName(null); }}
+        onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
+      />
+
+      <TemplateComposer
+        open={composer.open}
+        editName={composer.editName}
+        onClose={() => setComposer({ open: false, editName: null })}
+        onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
+      />
+
+      <EmailPickerDialog
+        open={pickerOpen}
+        templates={templates}
+        selected={selected}
+        me={me}
+        isAdmin={isAdmin}
+        onSelect={(name) => { setSelected(name); setPickerOpen(false); }}
+        onEdit={editTemplate}
+        onChanged={loadTemplates}
+        onClose={() => setPickerOpen(false)}
+      />
+
+      <ListSelectDialog
+        open={listSelectOpen}
+        lists={lists}
+        selected={selectedListSlugs}
+        dedupedCount={listUniqueCount}
+        me={me}
+        isAdmin={isAdmin}
+        onChange={setSelectedListSlugs}
+        onEdit={(slug) => setListEditor({ slug })}
+        onCreate={() => setListEditor({ slug: null })}
+        onChanged={loadLists}
+        onClose={() => setListSelectOpen(false)}
+      />
+
+      {listEditor && (
         <ListEditor
-          slug={null}
+          slug={listEditor.slug}
           me={me || null}
-          onClose={() => setQuickAddOpen(false)}
-          onSaved={onListsChanged}
+          isAdmin={isAdmin}
+          onClose={() => setListEditor(null)}
+          onSaved={(created) => {
+            // Auto-select a newly created list as a recipient.
+            if (created?.slug) {
+              setSelectedListSlugs((cur) => (cur.includes(created.slug) ? cur : [...cur, created.slug]));
+            }
+            loadLists();
+          }}
         />
       )}
+
+      <AdhocDialog
+        open={adhocOpen}
+        value={adhoc}
+        count={adhocRows.length}
+        onTextChange={setAdhoc}
+        onClose={() => setAdhocOpen(false)}
+      />
+
+      <SenderDialog
+        open={senderOpen}
+        options={sharedOptions}
+        current={from}
+        onSelect={setFrom}
+        onClose={() => setSenderOpen(false)}
+      />
 
       {confirmOpen && (
         <ConfirmSendModal
@@ -630,15 +760,6 @@ function SpinnerIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="animate-spin">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-    </svg>
-  );
-}
-
-function ArchiveIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="4" rx="1" />
-      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4" />
     </svg>
   );
 }

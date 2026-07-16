@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     const email = verifyDomain(info);
     if (!email) return fail(req, "domain"); // domain not allowed
 
-    const token = await createSession(email);
+    const token = await createSession(email, { name: info.name, picture: info.picture });
     // Prevent open redirect: only allow paths starting with a single non-slash slash ( blocks "//evil.com" )
     const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/";
     const dest = new URL(safeNext, originFromRequest(req));

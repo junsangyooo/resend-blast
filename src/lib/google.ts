@@ -52,7 +52,14 @@ export function buildAuthUrl(redirectUri: string, state: string): string {
   return `${AUTH_ENDPOINT}?${p.toString()}`;
 }
 
-type IdInfo = { email?: string; email_verified?: boolean | string; hd?: string };
+type IdInfo = {
+  email?: string;
+  email_verified?: boolean | string;
+  hd?: string;
+  /** profile scope claims — carried into the session for avatar/name display. */
+  name?: string;
+  picture?: string;
+};
 
 /** Exchange code → id_token, then parse email info. */
 export async function exchangeCode(code: string, redirectUri: string): Promise<IdInfo> {

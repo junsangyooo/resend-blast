@@ -5,10 +5,18 @@
 import { cookies } from "next/headers";
 import { verifySession, SESSION_COOKIE } from "./session";
 
-export async function currentUserEmail(): Promise<string | null> {
+export type SessionUser = { email: string; name?: string; picture?: string };
+
+/** Session user info (email + display profile). */
+export async function currentUser(): Promise<SessionUser | null> {
   const token = cookies().get(SESSION_COOKIE)?.value;
   const payload = await verifySession(token);
-  return payload?.email ?? null;
+  if (!payload?.email) return null;
+  return { email: payload.email, name: payload.name, picture: payload.picture };
+}
+
+export async function currentUserEmail(): Promise<string | null> {
+  return (await currentUser())?.email ?? null;
 }
 
 export async function requireUserEmail(): Promise<string> {

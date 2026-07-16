@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useEscClose } from "./hooks";
 
-type ExistingTemplate = { name: string; archived: boolean };
+type ExistingTemplate = { name: string };
 
 type Attachment = {
   id: string;
@@ -47,7 +47,8 @@ export default function AddTemplateDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  /** Called after saving with the saved name, so the caller can select it immediately. */
+  onSaved: (savedName?: string) => void;
   /** Edit mode: load and fill the raw body + meta for the given name. null for new mode. */
   editName?: string | null;
 }) {
@@ -73,7 +74,7 @@ export default function AddTemplateDialog({
     if (!open || editName) return;
     fetch("/api/templates")
       .then((r) => r.json())
-      .then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name, archived: t.archived }))))
+      .then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name }))))
       .catch(() => {});
   }, [open, editName]);
 
@@ -110,7 +111,7 @@ export default function AddTemplateDialog({
   const nameError = nameInvalid
     ? "영문/숫자/하이픈/언더스코어만 사용 가능합니다"
     : dup
-      ? `이미 같은 이름의 이메일이 있습니다${dup.archived ? " (보관함). 보관함에서 복원하거나 다른 이름을 사용하세요" : ". 다른 이름을 사용하세요"}`
+      ? "이미 같은 이름의 이메일이 있습니다. 다른 이름을 사용하세요"
       : "";
 
   // read a .html file and fill the body. If a full document, extract only inside <body>.
@@ -185,7 +186,7 @@ export default function AddTemplateDialog({
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error ?? "저장 실패");
-      onSaved();
+      onSaved(name.trim());
       onClose();
       // useEffect resets per mode on next open, so no need to reset here.
     } catch (e: any) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listTemplates, saveTemplate, buildFullHtml, setArchived, deleteTemplate } from "@/lib/templates";
+import { listTemplates, saveTemplate, buildFullHtml, deleteTemplate } from "@/lib/templates";
 import { previewFill } from "@/lib/blocks";
 import { requireUserEmail } from "@/lib/auth";
 
@@ -47,20 +47,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Archive toggle
-export async function PATCH(req: NextRequest) {
-  try {
-    const actor = await requireUserEmail();
-    const { name, archived } = await req.json();
-    await setArchived(String(name ?? ""), !!archived, actor);
-    return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    const msg = e?.message ?? "변경 실패";
-    return NextResponse.json({ ok: false, error: msg }, { status: msg.includes("권한") ? 403 : 400 });
-  }
-}
-
-// Permanent delete (called only from the archive)
+// Permanent delete — creator or admin only (enforced in lib)
 export async function DELETE(req: NextRequest) {
   try {
     const actor = await requireUserEmail();

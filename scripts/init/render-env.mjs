@@ -10,6 +10,7 @@ export function renderEnv(values, sessionSecret) {
     if (values.googleClientSecret) lines.push(`GOOGLE_CLIENT_SECRET=${values.googleClientSecret}`);
   }
   if (values.resendKey) lines.push(`RESEND_EMAIL_TRACKING_API_KEY=${values.resendKey}`);
+  if (values.anthropicApiKey) lines.push(`ANTHROPIC_API_KEY=${values.anthropicApiKey}`);
   lines.push(`AUTH_SESSION_SECRET=${sessionSecret}`);
   return lines.join("\n") + "\n";
 }

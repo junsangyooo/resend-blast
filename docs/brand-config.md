@@ -39,7 +39,7 @@ Semantic color constants drive **both** the email renderer (`lib/blocks.ts`) and
 ```ts
 const PRIMARY      = "#5b5bf0";  // accent — links, kicker, numbers, stats, app accent
 const PRIMARY_CTA  = "#7c7cff";  // CTA button background
-const PRIMARY_DEEP = "#4a4ad6";  // deep accent — app left rail, hover
+const PRIMARY_DEEP = "#4a4ad6";  // deep accent — hover/active states, avatar gradient
 const TEXT_HEADING = "#0f0f1a";
 const TEXT_BODY    = "#4a4a55";
 // … TEXT_SUB, TEXT_MUTED, HAIRLINE, CARD_BORDER, TINT_*, EMAIL_* …

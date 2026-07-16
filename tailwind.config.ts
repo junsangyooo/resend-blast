@@ -12,7 +12,6 @@ const config: Config = {
         muted: "rgb(var(--muted) / <alpha-value>)",
         text: "rgb(var(--text) / <alpha-value>)",
         brand: "rgb(var(--brand) / <alpha-value>)",
-        rail: "rgb(var(--rail) / <alpha-value>)",
         onBrand: "rgb(var(--on-brand) / <alpha-value>)",
       },
       fontFamily: {
