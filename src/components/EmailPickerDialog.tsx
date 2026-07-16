@@ -127,7 +127,7 @@ export default function EmailPickerDialog({
                 </button>
 
                 <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
-                  <button onClick={() => onEdit(t.name)} title={t.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"} className="icon-btn text-muted/60 hover:text-brand">
+                  <button onClick={() => onEdit(t.name)} title="스튜디오에서 수정" className="icon-btn text-muted/60 hover:text-brand">
                     <EditIcon />
                   </button>
                   {canDelete(t) && (
