@@ -1,4 +1,4 @@
-# CLAUDE.md — Email Blast
+# AGENTS.md — Email Blast
 
 ## Purpose
 A white-label **bulk email operations tool**. Build on-brand emails (event invites,
