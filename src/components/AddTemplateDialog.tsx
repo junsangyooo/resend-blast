@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useEscClose } from "./hooks";
 
-type ExistingTemplate = { name: string };
-
 type Attachment = {
   id: string;
   name: string;          // original filename (src matching key)
@@ -42,25 +40,25 @@ function localSrcCount(html: string): number {
   return n;
 }
 
+/**
+ * 새 이메일 업로드 (HTML 파일·코드 + 이미지). 기존 이메일 수정은 스튜디오(/studio?edit=)에서 한다.
+ * 내부 ID 는 서버가 자동으로 만들고, 사용자는 목록에 보일 이름(선택)만 정한다.
+ */
 export default function AddTemplateDialog({
-  open, onClose, onSaved, editName = null,
+  open, onClose, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
-  /** Called after saving with the saved name, so the caller can select it immediately. */
+  /** 저장 후 호출 — 저장된 ID 를 넘겨 호출측이 바로 선택할 수 있게 한다. */
   onSaved: (savedName?: string) => void;
-  /** Edit mode: load and fill the raw body + meta for the given name. null for new mode. */
-  editName?: string | null;
 }) {
-  const [name, setName] = useState("");
+  const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [description, setDescription] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [fileName, setFileName] = useState("");
-  const [existing, setExisting] = useState<ExistingTemplate[]>([]);
-  const [loading, setLoading] = useState(false);
   const [atts, setAtts] = useState<Attachment[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   // mirror for referencing the latest attachments/body when async upload completes
@@ -69,53 +67,19 @@ export default function AddTemplateDialog({
   const bodyRef = useRef("");
   bodyRef.current = body;
 
-  // new mode — load only the existing name list for duplicate checking
-  useEffect(() => {
-    if (!open || editName) return;
-    fetch("/api/templates")
-      .then((r) => r.json())
-      .then((j) => setExisting((j.templates ?? []).map((t: any) => ({ name: t.name }))))
-      .catch(() => {});
-  }, [open, editName]);
-
-  // reset form on mode switch / fetch raw body + meta in edit mode
+  // 열 때마다 폼 초기화
   useEffect(() => {
     if (!open) return;
     setErr(""); setFileName(""); setAtts([]);
-    if (editName) {
-      setName(editName);
-      setLoading(true);
-      fetch(`/api/templates/body?name=${encodeURIComponent(editName)}`)
-        .then((r) => r.json())
-        .then((j) => {
-          if (j.error) throw new Error(j.error);
-          setSubject(j.subject ?? "");
-          setBody(j.body ?? "");
-          setDescription(j.description ?? "");
-        })
-        .catch((e) => setErr(e?.message ?? "불러오기 실패"))
-        .finally(() => setLoading(false));
-    } else {
-      setName(""); setSubject(""); setBody(""); setDescription("");
-    }
-  }, [open, editName]);
+    setTitle(""); setSubject(""); setBody(""); setDescription("");
+  }, [open]);
 
   useEscClose(open, onClose);
 
   if (!open) return null;
 
-  const trimmed = name.trim();
-  // edit mode is its own name, so skip duplicate checking
-  const dup = !editName && trimmed ? existing.find((t) => t.name === trimmed) : null;
-  const nameInvalid = trimmed && !/^[A-Za-z0-9_-]+$/.test(trimmed);
-  const nameError = nameInvalid
-    ? "영문/숫자/하이픈/언더스코어만 사용 가능합니다"
-    : dup
-      ? "이미 같은 이름의 이메일이 있습니다. 다른 이름을 사용하세요"
-      : "";
-
-  // read a .html file and fill the body. If a full document, extract only inside <body>.
-  // re-replace src with the current attachment list right after loading — works even if images are uploaded first and HTML later.
+  // .html 파일을 읽어 본문에 채운다. 전체 문서면 <body> 안쪽만 추출.
+  // 로드 직후 현재 첨부 목록으로 src 재치환 — 이미지를 먼저 올리고 HTML 을 나중에 올려도 동작.
   async function loadHtmlFile(file: File) {
     setErr("");
     try {
@@ -124,10 +88,7 @@ export default function AddTemplateDialog({
       const extracted = (m ? m[1] : text).trim();
       setBody(replaceSrcs(extracted, attsRef.current));
       setFileName(file.name);
-      if (!name.trim()) {
-        const base = file.name.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
-        if (base) setName(base);
-      }
+      if (!title.trim()) setTitle(file.name.replace(/\.[^.]+$/, ""));
     } catch {
       setErr("파일을 읽지 못했습니다");
     }
@@ -182,13 +143,16 @@ export default function AddTemplateDialog({
       const r = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, subject, body, description, overwrite: !!editName }),
+        body: JSON.stringify({ title, subject, body, description }),
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error ?? "저장 실패");
-      onSaved(name.trim());
+      onSaved(j.name);
       onClose();
-      // useEffect resets per mode on next open, so no need to reset here.
+      if (window.confirm("저장했습니다. AI 스튜디오에서 이어서 다듬을까요?")) {
+        window.location.href = `/studio?edit=${encodeURIComponent(j.name)}`;
+      }
+      // 다음 open 시 useEffect 가 모드에 맞게 초기화하므로 여기서는 굳이 reset 안 함.
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");
     } finally {
@@ -201,31 +165,20 @@ export default function AddTemplateDialog({
       <form onSubmit={submit} className="card w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="p-5 border-b border-border flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="kicker">{editName ? "HTML 편집" : "HTML 직접 입력"}</div>
-            <h2 className="mt-1 text-base font-semibold truncate">{editName ? `${editName} 편집` : "새 이메일 추가 (HTML)"}</h2>
+            <div className="kicker">HTML 업로드</div>
+            <h2 className="mt-1 text-base font-semibold truncate">새 이메일 추가 (HTML)</h2>
           </div>
           <button type="button" onClick={onClose} className="text-muted hover:text-text shrink-0">✕</button>
         </div>
 
-        {loading && (
-          <div className="px-5 py-2 text-[11px] text-muted border-b border-border">불러오는 중…</div>
-        )}
-
         <div className="p-5 space-y-4 overflow-y-auto">
           <div>
-            <label className="block text-xs text-muted mb-1.5">
-              이메일 이름 <span className="text-brand">*</span>
-              <span className="ml-2 text-[10px]">영문/숫자/하이픈/언더스코어만</span>
-            </label>
+            <label className="block text-xs text-muted mb-1.5">목록에 보일 이름 (선택 — 비우면 제목 사용)</label>
             <input
-              className={`input ${nameError ? "border-red-500/60 focus:border-red-500" : ""}`}
-              required value={name}
-              disabled={!!editName}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g., DF-in-seoul-followup"
-              pattern="[A-Za-z0-9_-]+"
+              className="input" value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="예: 서울 행사 초청 2차"
             />
-            {nameError && <p className="mt-1 text-[11px] text-red-500">{nameError}</p>}
           </div>
 
           <div>
@@ -328,7 +281,7 @@ export default function AddTemplateDialog({
 
         <div className="p-5 border-t border-border flex justify-end gap-2">
           <button type="button" onClick={onClose} className="btn-ghost">취소</button>
-          <button disabled={saving || loading || !!nameError || !trimmed || !body.trim()} className="btn-primary">
+          <button disabled={saving || !subject.trim() || !body.trim()} className="btn-primary">
             {saving ? "저장 중..." : "저장"}
           </button>
         </div>

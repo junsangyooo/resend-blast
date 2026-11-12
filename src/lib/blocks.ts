@@ -60,6 +60,7 @@ export type BlockType =
 export type GridCard = {
   title?: string;
   desc?: string;
+  descHtml?: string;
   img?: string;   // Azure Blob URL
   value?: string; // stat
   btn?: string;   // cta label
@@ -96,7 +97,7 @@ export type Block = {
   // numbered / agenda
   title?: string;
   titleNote?: string;
-  items?: { title: string; desc?: string }[];
+  items?: { title: string; desc?: string; descHtml?: string }[];
   rows?: { time: string; label: string }[];
   // image
   alt?: string;
@@ -124,6 +125,8 @@ export type TemplateSpec = {
     inquiryEmail?: string;
     /** Whether to show the inquiry email line (default true). If false, omit "문의: …" from the footer. */
     showInquiry?: boolean;
+    /** 회사명(전송자 명칭) 표시 여부 (기본 true). 문의·주소까지 모두 끄면 해당 줄 자체가 사라짐. */
+    showOrgName?: boolean;
     showSocial?: boolean;
     showUnsubscribe?: boolean;
     orgName?: string;
@@ -171,15 +174,25 @@ function pickBrandColor(tag: string): string {
   const hex = m[1].toLowerCase();
   return BRAND_HEX.has(hex) ? hex : "";
 }
-/** Normalize text.html inline formatting to a whitelist (bold/italic/line break/brand-color span). */
+/** sanitizeInline 전용 escaper — 이미 escape 된 entity 는 보존해 재적용(idempotent)을 보장.
+ *  전역 esc() 는 그대로 둔다: subject/제목 등 평문 필드는 리터럴 escape 시맨틱 유지. */
+function escKeepEntities(s: string): string {
+  return s
+    .replace(/&(?!(?:amp|lt|gt|quot|#39|#\d{1,7}|#x[0-9a-fA-F]{1,6});)/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+/** text.html 의 인라인 서식을 화이트리스트(굵게/기울임/줄바꿈/브랜드색 span)로 정규화. idempotent. */
 export function sanitizeInline(html: string): string {
   let out = "";
   let last = 0;
   const tagRe = /<\/?[a-zA-Z][^>]*>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(html))) {
-    // escape text before the tag
-    out += esc(html.slice(last, m.index));
+    // 태그 이전 텍스트는 escape (entity 보존 — 재적용해도 이중 escape 안 됨)
+    out += escKeepEntities(html.slice(last, m.index));
     last = m.index + m[0].length;
     const tag = m[0];
     const lower = tag.toLowerCase().replace(/\s+/g, "");
@@ -187,10 +200,15 @@ export function sanitizeInline(html: string): string {
     else if (lower === "</b>" || lower === "</strong>") out += "</strong>";
     else if (/^<(i|em)>$/.test(lower) || /^<(i|em)\b/.test(tag.toLowerCase())) out += "<em>";
     else if (lower === "</i>" || lower === "</em>") out += "</em>";
+    else if (/^<(u)>$/.test(lower) || /^<u\b/.test(tag.toLowerCase())) out += "<u>";
+    else if (lower === "</u>") out += "</u>";
+    else if (/^<(s|strike|del)>$/.test(lower) || /^<(s|strike|del)\b/.test(tag.toLowerCase())) out += "<s>";
+    else if (lower === "</s>" || lower === "</strike>" || lower === "</del>") out += "</s>";
     else if (/^<br\/?>$/.test(lower)) out += "<br>";
     else if (/^<a\b/.test(tag.toLowerCase())) {
       const hm = tag.match(/href\s*=\s*["']?([^"'\s>]+)/i);
-      const href = hm ? url(hm[1]) : "#";
+      // href 는 attribute 컨텍스트라 이전 pass 에서 &amp; 로 escape 되어 있을 수 있음 — 되돌린 뒤 재escape (idempotent)
+      const href = hm ? url(hm[1].replace(/&amp;/g, "&")) : "#";
       out += `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:${TEAL}; text-decoration:underline;">`;
     } else if (lower === "</a>") out += "</a>";
     else if (/^<(span|font)\b/.test(tag.toLowerCase())) {
@@ -199,7 +217,7 @@ export function sanitizeInline(html: string): string {
     } else if (lower === "</span>" || lower === "</font>") out += "</span>";
     // other tags (div, p, script, …) are removed
   }
-  out += esc(html.slice(last));
+  out += escKeepEntities(html.slice(last));
   return out;
 }
 
@@ -242,30 +260,53 @@ export function resolveStyle(b: Block, idx: number): Resolved {
   return { align, size, weight, color, font };
 }
 
-// ── Comment (subnote) small gray line ──
-function noteHtml(text: string | undefined, align: Align, margin: string): string {
+// ── 에디터 주석(미리보기 전용) ──
+// renderTemplate(spec, { annotate: true }) 일 때만 data-eb-* 속성을 붙여, 스튜디오 미리보기에서
+// "이 글자 = 어느 블록의 어느 필드"를 알 수 있게 한다. 저장·발송 HTML 에는 절대 붙지 않는다.
+let ANNOTATE = false;
+/** Editable field: data-eb-f="<blockId>:<path>", kind rich (inline HTML) or plain (text). */
+function fa(b: { id: string }, path: string, rich = false): string {
+  return ANNOTATE ? ` data-eb-f="${b.id}:${path}" data-eb-k="${rich ? "rich" : "plain"}"` : "";
+}
+/** Wrap inline text in an editable span — only in the editor preview, never in saved/sent HTML. */
+function fw(b: { id: string }, path: string, inner: string): string {
+  // data-eb-w marks an editor-only wrapper: unwrapped in the code view and skipped in element indexing.
+  return ANNOTATE ? `<span data-eb-w="1"${fa(b, path)}>${inner}</span>` : inner;
+}
+/** Link target field (href). */
+function la(b: { id: string }, path: string): string {
+  return ANNOTATE ? ` data-eb-l="${b.id}:${path}"` : "";
+}
+/** Image source field (src). */
+function ia(b: { id: string }, path: string): string {
+  return ANNOTATE ? ` data-eb-i="${b.id}:${path}"` : "";
+}
+
+// ── 코멘트(부제) 작은 회색 줄 ──
+function noteHtml(text: string | undefined, align: Align, margin: string, attr = ""): string {
   if (text === undefined) return "";
-  return `<p style="text-align:${align}; color:${MUTED}; font-size:12.5px; line-height:1.6; margin:${margin};">${nl2br(text)}</p>`;
+  return `<p${attr} style="text-align:${align}; color:${MUTED}; font-size:12.5px; line-height:1.6; margin:${margin};">${nl2br(text)}</p>`;
 }
 
 // ── Leaf renderers ──
 function renderKicker(b: Block, s: Resolved): string {
   if (!b.text?.trim()) return "";
-  return `<p style="text-align:${s.align}; color:${s.color}; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin:0;">${esc(b.text)}</p>`;
+  return `<p${fa(b, "text")} style="text-align:${s.align}; color:${s.color}; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin:0;">${esc(b.text)}</p>`;
 }
 function renderHeading(b: Block, s: Resolved): string {
   if (!b.text?.trim()) return "";
   const px = HEADING_PX[s.size];
   const fw = s.weight === "bold" ? 800 : 700;
-  const main = `<h1 style="text-align:${s.align}; color:${s.color}; font-size:${px}px; font-weight:${fw}; line-height:1.2; letter-spacing:-0.3px; margin:0; font-family:${s.font};">${nl2br(b.text)}</h1>`;
-  return main + noteHtml(b.subnote, s.align, "8px 0 0");
+  const main = `<h1${fa(b, "text")} style="text-align:${s.align}; color:${s.color}; font-size:${px}px; font-weight:${fw}; line-height:1.2; letter-spacing:-0.3px; margin:0; font-family:${s.font};">${nl2br(b.text)}</h1>`;
+  return main + noteHtml(b.subnote, s.align, "8px 0 0", fa(b, "subnote"));
 }
 function renderText(b: Block, s: Resolved): string {
   const px = TEXT_PX[s.size];
   const fw = s.weight === "bold" ? 700 : 400;
   const inner = b.html !== undefined ? sanitizeInline(b.html) : nl2br(b.text ?? "");
   if (!inner.trim()) return "";
-  return `<p style="text-align:${s.align}; color:${s.color}; font-size:${px}px; line-height:1.8; font-weight:${fw}; margin:0; font-family:${s.font};">${inner}</p>`;
+  const f = b.html !== undefined ? fa(b, "html", true) : fa(b, "text");
+  return `<p${f} style="text-align:${s.align}; color:${s.color}; font-size:${px}px; line-height:1.8; font-weight:${fw}; margin:0; font-family:${s.font};">${inner}</p>`;
 }
 function renderBadge(b: Block, s: Resolved): string {
   if (!b.line1?.trim() && !b.line2?.trim()) return "";
@@ -275,7 +316,7 @@ function renderBadge(b: Block, s: Resolved): string {
   const innerBtn = b.label?.trim()
     ? `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:14px auto 0;">
         <tr><td align="center" bgcolor="${bc.bg}" style="background-color:${bc.bg}; border-radius:8px;">
-          <a target="_blank" rel="noopener noreferrer" href="${url(b.url ?? "")}" style="display:inline-block; padding:12px 34px; color:${bc.fg}; font-size:14px; font-weight:700; text-decoration:none; letter-spacing:0.3px;">${esc(b.label)}${b.arrow === false ? "" : " &rarr;"}</a>
+          <a${la(b, "url")} target="_blank" rel="noopener noreferrer" href="${url(b.url ?? "")}" style="display:inline-block; padding:12px 34px; color:${bc.fg}; font-size:14px; font-weight:700; text-decoration:none; letter-spacing:0.3px;">${fw(b, "label", esc(b.label))}${b.arrow === false ? "" : " &rarr;"}</a>
         </td></tr>
       </table>`
     : "";
@@ -283,12 +324,12 @@ function renderBadge(b: Block, s: Resolved): string {
   const pad = innerBtn ? "18px 24px" : "14px 22px";
   const box = `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 ${center ? "auto" : "0"};">
     <tr><td bgcolor="${TEAL_TINT_BG}" style="background-color:${TEAL_TINT_BG}; border:1px solid ${TEAL_TINT_BORDER}; border-radius:6px; padding:${pad};">
-      <p style="${ta}color:${INK}; font-size:15px; font-weight:600; margin:0${b.line2?.trim() ? " 0 4px 0" : ""}; letter-spacing:0.3px;">${esc(b.line1)}</p>
-      ${b.line2?.trim() ? `<p style="${ta}color:${SUB}; font-size:13px; margin:0;">${b.line2Href?.trim() ? `<a href="${url(b.line2Href)}" target="_blank" rel="noopener noreferrer" style="color:${SUB}; text-decoration:underline;">${esc(b.line2)}</a>` : esc(b.line2)}</p>` : ""}
+      <p${fa(b, "line1")} style="${ta}color:${INK}; font-size:15px; font-weight:600; margin:0${b.line2?.trim() ? " 0 4px 0" : ""}; letter-spacing:0.3px;">${esc(b.line1)}</p>
+      ${b.line2?.trim() ? `<p style="${ta}color:${SUB}; font-size:13px; margin:0;">${b.line2Href?.trim() ? `<a${la(b, "line2Href")}${fa(b, "line2")} href="${url(b.line2Href)}" target="_blank" rel="noopener noreferrer" style="color:${SUB}; text-decoration:underline;">${esc(b.line2)}</a>` : fw(b, "line2", esc(b.line2))}</p>` : ""}
       ${innerBtn}
     </td></tr>
   </table>`;
-  return box + noteHtml(b.bottomNote, s.align, "10px 0 0");
+  return box + noteHtml(b.bottomNote, s.align, "10px 0 0", fa(b, "bottomNote"));
 }
 function renderButton(b: Block, s: Resolved): string {
   if (!b.label?.trim()) return "";
@@ -296,88 +337,96 @@ function renderButton(b: Block, s: Resolved): string {
   const bc = resolveButtonColors(b);
   const btn = `<table cellpadding="0" cellspacing="0" role="presentation" style="margin:0 ${center ? "auto" : "0"};">
     <tr><td align="center" bgcolor="${bc.bg}" style="background-color:${bc.bg}; border-radius:8px;">
-      <a target="_blank" rel="noopener noreferrer" href="${url(b.url ?? "")}" style="display:inline-block; padding:14px 36px; color:${bc.fg}; font-size:14.5px; font-weight:700; text-decoration:none; letter-spacing:0.3px;">${esc(b.label)}${b.arrow === false ? "" : " &rarr;"}</a>
+      <a${la(b, "url")} target="_blank" rel="noopener noreferrer" href="${url(b.url ?? "")}" style="display:inline-block; padding:14px 36px; color:${bc.fg}; font-size:14.5px; font-weight:700; text-decoration:none; letter-spacing:0.3px;">${fw(b, "label", esc(b.label))}${b.arrow === false ? "" : " &rarr;"}</a>
     </td></tr>
   </table>`;
-  return noteHtml(b.topNote, s.align, "0 0 10px") + btn + noteHtml(b.bottomNote, s.align, "10px 0 0");
+  return noteHtml(b.topNote, s.align, "0 0 10px", fa(b, "topNote")) + btn + noteHtml(b.bottomNote, s.align, "10px 0 0", fa(b, "bottomNote"));
 }
 function renderNumbered(b: Block, s: Resolved): string {
-  const items = (b.items ?? []).filter((it) => it?.title?.trim());
-  const rows = items.map((it, i) => {
+  // Keep each item's original index — the editor maps preview text back to items.<index>.
+  const items = (b.items ?? []).map((it, oi) => ({ it, oi })).filter(({ it }) => it?.title?.trim());
+  const rows = items.map(({ it, oi }, i) => {
     const n = String(i + 1).padStart(2, "0");
     const last = i === items.length - 1;
-    const desc = it.desc?.trim() ? `<br><span style="color:${SUB}; font-size:13px;">${nl2br(it.desc)}</span>` : "";
+    const descInner = it.descHtml !== undefined ? sanitizeInline(it.descHtml) : it.desc?.trim() ? nl2br(it.desc) : "";
+    const df = it.descHtml !== undefined ? fa(b, `items.${oi}.descHtml`, true) : fa(b, `items.${oi}.desc`);
+    const desc = descInner ? `<br><span${df} style="color:${SUB}; font-size:13px;">${descInner}</span>` : "";
     return `<tr><td style="padding:0 0 ${last ? "0" : "12px"} 0; vertical-align:top;">
       <table cellpadding="0" cellspacing="0" role="presentation"><tr>
         <td valign="top" width="28" style="color:${TEAL}; font-family:${MONO}; font-size:13px; font-weight:600; padding-top:1px;">${n}</td>
-        <td><strong style="color:${INK};">${esc(it.title)}</strong>${desc}</td>
+        <td><strong${fa(b, `items.${oi}.title`)} style="color:${INK};">${esc(it.title)}</strong>${desc}</td>
       </tr></table></td></tr>`;
   }).join("\n");
   if (!rows && b.title === undefined) return "";
   const head = b.title !== undefined
-    ? `<p style="text-align:${s.align}; color:${INK}; font-size:18px; font-weight:700; margin:0 0 ${b.titleNote !== undefined ? "4px" : "14px"};">${esc(b.title)}</p>` + noteHtml(b.titleNote, s.align, "0 0 14px")
+    ? `<p${fa(b, "title")} style="text-align:${s.align}; color:${INK}; font-size:18px; font-weight:700; margin:0 0 ${b.titleNote !== undefined ? "4px" : "14px"};">${esc(b.title)}</p>` + noteHtml(b.titleNote, s.align, "0 0 14px", fa(b, "titleNote"))
     : "";
   const table = rows ? `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="font-size:14px; color:${BODY}; line-height:1.75; margin:0;">${rows}</table>` : "";
-  return head + table + noteHtml(b.bottomNote, s.align, "14px 0 0");
+  return head + table + noteHtml(b.bottomNote, s.align, "14px 0 0", fa(b, "bottomNote"));
 }
 function renderAgenda(b: Block, s: Resolved): string {
-  const rs = (b.rows ?? []).filter((r) => r?.time?.trim() || r?.label?.trim());
-  const rows = rs.map((r) => `<tr>
-      <td style="color:${SUB}; font-family:${MONO}; font-size:13px; padding:3px 18px 3px 0; white-space:nowrap; vertical-align:top;">${esc(r.time)}</td>
-      <td style="padding:3px 0; vertical-align:top;">${esc(r.label)}</td>
+  const rs = (b.rows ?? []).map((r, oi) => ({ r, oi })).filter(({ r }) => r?.time?.trim() || r?.label?.trim());
+  const rows = rs.map(({ r, oi }) => `<tr>
+      <td${fa(b, `rows.${oi}.time`)} style="color:${SUB}; font-family:${MONO}; font-size:13px; padding:3px 18px 3px 0; white-space:nowrap; vertical-align:top;">${esc(r.time)}</td>
+      <td${fa(b, `rows.${oi}.label`)} style="padding:3px 0; vertical-align:top;">${esc(r.label)}</td>
     </tr>`).join("\n");
   if (!rows && b.title === undefined) return "";
   const head = b.title !== undefined
-    ? `<p style="text-align:${s.align}; color:${INK}; font-size:18px; font-weight:700; margin:0 0 ${b.titleNote !== undefined ? "4px" : "14px"};">${esc(b.title)}</p>` + noteHtml(b.titleNote, s.align, "0 0 14px")
+    ? `<p${fa(b, "title")} style="text-align:${s.align}; color:${INK}; font-size:18px; font-weight:700; margin:0 0 ${b.titleNote !== undefined ? "4px" : "14px"};">${esc(b.title)}</p>` + noteHtml(b.titleNote, s.align, "0 0 14px", fa(b, "titleNote"))
     : "";
   const table = rows ? `<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="font-size:14px; color:${BODY}; line-height:1.9;">${rows}</table>` : "";
-  return head + table + noteHtml(b.bottomNote, s.align, "14px 0 0");
+  return head + table + noteHtml(b.bottomNote, s.align, "14px 0 0", fa(b, "bottomNote"));
 }
 function renderImage(b: Block, s: Resolved): string {
-  if (!b.url?.trim()) return noteHtml(b.title, s.align, "0 0 10px");
+  if (!b.url?.trim()) return noteHtml(b.title, s.align, "0 0 10px", fa(b, "title"));
   const w = b.width && b.width > 0 ? ` width="${clampWidth(b.width, 600)}"` : "";
   const head = b.title !== undefined
-    ? `<p style="text-align:${s.align}; color:${INK}; font-size:16px; font-weight:700; margin:0 0 10px;">${esc(b.title)}</p>` : "";
-  const imgTag = `<img src="${url(b.url)}"${w} alt="${esc(b.alt ?? "")}" style="display:block; margin:0 ${s.align === "center" ? "auto" : "0"}; border:0; max-width:100%; height:auto; border-radius:6px;">`;
+    ? `<p${fa(b, "title")} style="text-align:${s.align}; color:${INK}; font-size:16px; font-weight:700; margin:0 0 10px;">${esc(b.title)}</p>` : "";
+  const imgTag = `<img${ia(b, "url")} src="${url(b.url)}"${w} alt="${esc(b.alt ?? "")}" style="display:block; margin:0 ${s.align === "center" ? "auto" : "0"}; border:0; max-width:100%; height:auto; border-radius:6px;">`;
   const img = b.href?.trim()
-    ? `<a href="${url(b.href)}" target="_blank" rel="noopener noreferrer" style="display:block; text-decoration:none; margin:0 ${s.align === "center" ? "auto" : "0"}; max-width:100%;">${imgTag}</a>`
+    ? `<a${la(b, "href")} href="${url(b.href)}" target="_blank" rel="noopener noreferrer" style="display:block; text-decoration:none; margin:0 ${s.align === "center" ? "auto" : "0"}; max-width:100%;">${imgTag}</a>`
     : imgTag;
-  return head + img + noteHtml(b.caption, s.align, "10px 0 0");
+  return head + img + noteHtml(b.caption, s.align, "10px 0 0", fa(b, "caption"));
 }
 function dividerHtml(): string {
   return `<div style="border-top:1px solid ${HAIR}; height:1px; line-height:1px;">&nbsp;</div>`;
 }
 
-// ── grid block ──
-function gridCardHtml(b: Block, c: GridCard, align: Align): string {
+// ── grid 블록 ──
+function gridCardHtml(b: Block, c: GridCard, align: Align, ci: number): string {
+  const P = `cards.${ci}`;
+  const descF = c.descHtml !== undefined ? fa(b, `${P}.descHtml`, true) : fa(b, `${P}.desc`);
   const t = b.cardType ?? "feature";
   const pad = "16px";
   const border = `1px solid ${CARD_BORDER}`;
   if (t === "image") {
     const img = c.img?.trim()
-      ? `<img src="${url(c.img)}" alt="${esc(c.title ?? "")}" style="display:block; width:100%; height:auto; border-radius:8px; margin:0 0 11px; border:0;">`
+      ? `<img${ia(b, `${P}.img`)} src="${url(c.img)}" alt="${esc(c.title ?? "")}" style="display:block; width:100%; height:auto; border-radius:8px; margin:0 0 11px; border:0;">`
       : "";
-    const desc = c.desc?.trim() ? `<p style="margin:0; color:${SUB}; font-size:12.5px; line-height:1.6;">${nl2br(c.desc)}</p>` : "";
+    const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+    const desc = descInner ? `<p${descF} style="margin:0; color:${SUB}; font-size:12.5px; line-height:1.6;">${descInner}</p>` : "";
     return `<div style="border:${border}; border-radius:12px; padding:${pad}; text-align:${align};">${img}${desc}</div>`;
   }
   if (t === "stat") {
-    const v = c.value?.trim() ? `<p style="margin:0; color:${TEAL}; font-family:${MONO}; font-size:28px; font-weight:800; line-height:1.1; text-align:${align};">${esc(c.value)}</p>` : "";
-    const l = c.title?.trim() ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; text-align:${align};">${esc(c.title)}</p>` : "";
+    const v = c.value?.trim() ? `<p${fa(b, `${P}.value`)} style="margin:0; color:${TEAL}; font-family:${MONO}; font-size:28px; font-weight:800; line-height:1.1; text-align:${align};">${esc(c.value)}</p>` : "";
+    const l = c.title?.trim() ? `<p${fa(b, `${P}.title`)} style="margin:6px 0 0; color:${SUB}; font-size:12.5px; text-align:${align};">${esc(c.title)}</p>` : "";
     return `<div style="border:${border}; border-radius:12px; padding:${pad};">${v}${l}</div>`;
   }
   if (t === "cta") {
-    const title = c.title?.trim() ? `<p style="margin:0; color:${INK}; font-size:15px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
-    const desc = c.desc?.trim() ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${nl2br(c.desc)}</p>` : "";
+    const title = c.title?.trim() ? `<p${fa(b, `${P}.title`)} style="margin:0; color:${INK}; font-size:15px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
+    const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+    const desc = descInner ? `<p${descF} style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${descInner}</p>` : "";
     const moreLabel = c.btn?.trim() || "자세히";
-    const more = `<p style="margin:13px 0 0; color:${TEAL}; font-size:13px; font-weight:700; text-align:${align};">${esc(moreLabel)} &rarr;</p>`;
+    const more = `<p style="margin:13px 0 0; color:${TEAL}; font-size:13px; font-weight:700; text-align:${align};">${fw(b, `${P}.btn`, esc(moreLabel))} &rarr;</p>`;
     const inner = `<div style="border:${border}; border-radius:12px; padding:${pad};">${title}${desc}${more}</div>`;
     return c.url?.trim()
-      ? `<a href="${url(c.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:block;">${inner}</a>`
+      ? `<a${la(b, `${P}.url`)} href="${url(c.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none; display:block;">${inner}</a>`
       : inner;
   }
   // feature
-  const title = c.title?.trim() ? `<p style="margin:0; color:${INK}; font-size:14.5px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
-  const desc = c.desc?.trim() ? `<p style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${nl2br(c.desc)}</p>` : "";
+  const title = c.title?.trim() ? `<p${fa(b, `${P}.title`)} style="margin:0; color:${INK}; font-size:14.5px; font-weight:700; text-align:${align};">${esc(c.title)}</p>` : "";
+  const descInner = c.descHtml !== undefined ? sanitizeInline(c.descHtml) : c.desc?.trim() ? nl2br(c.desc) : "";
+  const desc = descInner ? `<p${descF} style="margin:6px 0 0; color:${SUB}; font-size:12.5px; line-height:1.6; text-align:${align};">${descInner}</p>` : "";
   return `<div style="border:${border}; border-radius:12px; padding:${pad}; text-align:${align};">${title}${desc}</div>`;
 }
 function renderGrid(b: Block): string {
@@ -386,9 +435,9 @@ function renderGrid(b: Block): string {
   const cols = b.cols === 3 ? 3 : 2;
   const align: Align = b.cardAlign ?? (b.cardType === "stat" ? "center" : b.cardType === "cta" ? "center" : "left");
   const wPct = cols === 3 ? "33.33%" : "50%";
-  // Responsive: 1-column stack on small screens (supported clients). Keeps cell ratios when unsupported.
-  const cells = cards.map((c) =>
-    `<td class="eb-col" width="${wPct}" style="width:${wPct}; vertical-align:top; padding:7px;">${gridCardHtml(b, c, align)}</td>`
+  // 반응형: 작은 화면에서 1열 stack (지원 클라이언트). 미지원 시 셀 비율 유지.
+  const cells = cards.map((c, ci) =>
+    `<td class="eb-col" width="${wPct}" style="width:${wPct}; vertical-align:top; padding:7px;">${gridCardHtml(b, c, align, ci)}</td>`
   );
   let rowsHtml = "";
   for (let i = 0; i < cells.length; i += cols) {
@@ -422,7 +471,7 @@ function renderBlockRow(b: Block, idx: number): string {
   if (!inner.trim()) return "";
   const gapY = GAP_PX[b.gap ?? ""] ?? GAP_PX[""];
   const padX = b.type === "image" && b.fullBleed ? 0 : 40;
-  return `<tr><td style="padding:${gapY}px ${padX}px;">${inner}</td></tr>`;
+  return `<tr><td${ANNOTATE ? ` data-eb-b="${b.id}"` : ""} style="padding:${gapY}px ${padX}px;">${inner}</td></tr>`;
 }
 
 function renderLogo(spec: TemplateSpec): string {
@@ -441,6 +490,7 @@ function renderLogo(spec: TemplateSpec): string {
 function renderFooter(footer?: TemplateSpec["footer"]): string {
   const email = footer?.inquiryEmail?.trim() || DEFAULT_INQUIRY;
   const showInquiry = footer?.showInquiry !== false;
+  const showOrgName = footer?.showOrgName !== false;
   const showSocial = footer?.showSocial !== false;
   const showUnsub = footer?.showUnsubscribe !== false;
   const orgName = footer?.orgName?.trim() || SENDER_ORG_NAME;
@@ -459,12 +509,16 @@ function renderFooter(footer?: TemplateSpec["footer"]): string {
     </p>`
     : "";
 
-  const inquiryPart = showInquiry
-    ? ` · 문의: <a href="mailto:${esc(email)}" style="color:${MUTED}; text-decoration:underline;">${esc(email)}</a>`
+  const senderParts = [
+    showOrgName ? esc(orgName) : "",
+    showInquiry ? `문의: <a href="mailto:${esc(email)}" style="color:${MUTED}; text-decoration:underline;">${esc(email)}</a>` : "",
+    address ? esc(address) : "",
+  ].filter(Boolean);
+  const senderLine = senderParts.length
+    ? `<p style="color:${MUTED}; font-size:11px; line-height:1.6; margin:0 0 4px 0;">
+      ${senderParts.join(" · ")}
+    </p>`
     : "";
-  const senderLine = `<p style="color:${MUTED}; font-size:11px; line-height:1.6; margin:0 0 4px 0;">
-      ${esc(orgName)}${inquiryPart}${address ? ` · ${esc(address)}` : ""}
-    </p>`;
 
   const unsubLine = showUnsub ? `<p style="color:${MUTED}; font-size:11px; line-height:1.6; margin:0 0 12px 0;">
       이 메일을 더 이상 받고 싶지 않으시면 <a href="${UNSUB_PLACEHOLDER}" style="color:${MUTED}; text-decoration:underline;">수신거부</a> 하실 수 있습니다.
@@ -487,8 +541,17 @@ export function specWidthPx(spec: Pick<TemplateSpec, "width">): number {
   return spec.width === "wide" ? 680 : 600;
 }
 
-/** spec → body HTML to place inside <body>. */
-export function renderTemplate(spec: TemplateSpec): string {
+/** spec → <body> 안에 들어갈 본문 HTML. annotate=true 는 스튜디오 미리보기 전용 (data-eb-* 속성 추가). */
+export function renderTemplate(spec: TemplateSpec, opts: { annotate?: boolean } = {}): string {
+  ANNOTATE = !!opts.annotate;
+  try {
+    return renderTemplateInner(spec);
+  } finally {
+    ANNOTATE = false;
+  }
+}
+
+function renderTemplateInner(spec: TemplateSpec): string {
   const blocks = (spec.blocks ?? []).filter((b) => b && b.type);
   const rows = blocks.map((b, i) => renderBlockRow(b, i)).filter((h) => h.trim()).join("\n");
   const W = specWidthPx(spec);
@@ -584,36 +647,5 @@ function flattenBlock(b: any, out: Block[]): void {
       return;
     default:
       return;
-  }
-}
-
-// ── Palette (for UI) ──
-export const BLOCK_PALETTE: { type: BlockType; label: string; hint: string }[] = [
-  { type: "heading", label: "제목", hint: "대제목/소제목" },
-  { type: "text", label: "본문", hint: "문단 텍스트 (드래그로 부분 강조)" },
-  { type: "button", label: "버튼", hint: "민트 CTA 버튼" },
-  { type: "badge", label: "날짜 배지", hint: "1·2줄 강조 박스" },
-  { type: "kicker", label: "작은 라벨", hint: "작은 대문자 라벨" },
-  { type: "numbered", label: "번호 목록", hint: "01·02… 포인트" },
-  { type: "agenda", label: "어젠다 표", hint: "시간 ─ 내용" },
-  { type: "grid", label: "그리드", hint: "카드 묶음 (2·3열)" },
-  { type: "image", label: "이미지", hint: "업로드 → 가운데" },
-  { type: "divider", label: "구분선", hint: "얇은 가로선" },
-];
-
-export function emptyBlock(type: BlockType): Block {
-  const id = newId();
-  switch (type) {
-    case "heading": return { id, type, text: "" };
-    case "text": return { id, type, html: "" };
-    // New buttons/badges default arrow off (unset=true kept only for existing saved-version compat).
-    case "button": return { id, type, label: "", url: "", arrow: false };
-    case "badge": return { id, type, line1: "", line2: "", arrow: false };
-    case "kicker": return { id, type, text: "" };
-    case "numbered": return { id, type, items: [{ title: "", desc: "" }] };
-    case "agenda": return { id, type, rows: [{ time: "", label: "" }] };
-    case "grid": return { id, type, cols: 2, cardType: "feature", cards: [{ title: "", desc: "" }, { title: "", desc: "" }] };
-    case "image": return { id, type };
-    case "divider": return { id, type };
   }
 }

@@ -1,25 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddTemplateDialog from "./AddTemplateDialog";
-import TemplateComposer from "./TemplateComposer";
 import CreateEmailDialog from "./CreateEmailDialog";
 import EmailPickerDialog, { type PickerTemplate } from "./EmailPickerDialog";
 import ListSelectDialog, { type ListRow } from "./ListSelectDialog";
 import SenderDialog from "./SenderDialog";
 import AdhocDialog from "./AdhocDialog";
 import ListEditor from "./ListEditor";
-import ConfirmSendModal from "./ConfirmSendModal";
-import { parseRecipientGrid } from "@/lib/recipients";
+import ConfirmSendModal, { type ConfirmResult } from "./ConfirmSendModal";
+import SaveAsListDialog from "./SaveAsListDialog";
+import { parseRecipientGrid, type Recipient } from "@/lib/recipients";
 import { brand } from "@/brand.config";
 
 type FromOption = { value: string; label: string; builtin?: boolean; scope?: "shared" | "personal"; owner?: string };
 
 type SendEvent =
-  | { type: "info"; sendId: string; kind?: string; template: string; subject: string; from: string; valid: number; excludedSuppressed?: number; adhoc: { invalid: string[]; duplicates: string[] } }
+  | { type: "info"; sendId: string; kind?: string; template: string; subject: string; from: string; valid: number; excludedSuppressed?: number; excludedByList?: number; excludedManually?: number; adhoc: { invalid: string[]; duplicates: string[] } }
   | { type: "ok"; to: string; id?: string; i: number; total: number }
   | { type: "fail"; to: string; error: string; i: number; total: number }
-  | { type: "done"; sendId: string; ok: number; fail: number; aborted?: boolean; total: number; failedEmails: string[]; at: string };
+  | { type: "skip"; to: string; reason: string; i: number; total: number }
+  | { type: "done"; sendId: string; ok: number; fail: number; skipped?: number; aborted?: boolean; total: number; failedEmails: string[]; at: string };
+
+/** Send-screen selections survive navigation (studio round-trips, reloads) for this browser tab. */
+const STORE_KEY = "eb.sendform.v1";
+type Persisted = {
+  selected: string; selectedListSlugs: string[]; excludeListSlugs: string[];
+  adhoc: string; from: string; replyTo: string; isAd: boolean;
+};
+function readPersisted(): Partial<Persisted> {
+  try { return JSON.parse(sessionStorage.getItem(STORE_KEY) ?? "{}") ?? {}; } catch { return {}; }
+}
 
 export type SendPrefill = {
   template?: string;
@@ -30,29 +41,35 @@ export type SendPrefill = {
   replyTo?: string;
   /** Bypass the 90-second idempotency dedupe block (intentional resend). */
   force?: boolean;
+  /** Source send of this re-send (recorded as a follow-up). */
+  followupOf?: string;
   nonce: number;
 } | null;
 
 type Props = {
   prefill?: SendPrefill;
   configReloadKey?: number;
+  /** A send was scheduled — refresh the top-bar badge. */
+  onScheduled?: () => void;
+  onOpenSchedules?: () => void;
+  onOpenHistory?: () => void;
 };
 
 /**
- * Send screen — the left 3 steps delegate their lists to popups so everything fits on
- * one screen without scrolling.
- * ① Email: create (block composer / upload popup) or pick from the list (everyone sees
- *    everything, only the creator can delete)
- * ② Recipients: create/select a list (popup: multi-select + inline edit/delete) + ad-hoc (popup)
- * ③ Sender: my account / shared sender (popup) + Reply-To · ad flag
+ * 발송 화면 — 좌측 3단계는 목록을 팝업으로 위임해 스크롤 없이 한 화면에 들어온다.
+ * ① 이메일: 만들기(생성/업로드 팝업) 또는 목록에서 선택(전체 노출·생성자만 삭제)
+ * ② 수신자: 리스트 만들기/선택(팝업에서 다중선택·수정·삭제) + 직접 입력(팝업)
+ * ③ 발신: 내 계정으로 / 공용 발신자로(팝업 선택) + Reply-To·광고성
  */
-export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
+export default function SendForm({ prefill, configReloadKey = 0, onScheduled, onOpenSchedules, onOpenHistory }: Props) {
   const [templates, setTemplates] = useState<PickerTemplate[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [lists, setLists] = useState<ListRow[]>([]);
 
   const [selectedListSlugs, setSelectedListSlugs] = useState<string[]>([]);
-  const [listMembersPreview, setListMembersPreview] = useState<{ email: string; name?: string; listSlug: string }[]>([]);
+  const [excludeListSlugs, setExcludeListSlugs] = useState<string[]>([]);
+  const [excludedListEmails, setExcludedListEmails] = useState<Set<string>>(new Set());
+  const [listMembersPreview, setListMembersPreview] = useState<{ email: string; name?: string; company?: string; title?: string; listSlug: string }[]>([]);
   const [adhoc, setAdhoc] = useState("");
 
   const [fromOptions, setFromOptions] = useState<FromOption[]>([]);
@@ -62,7 +79,13 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
   const [myNick, setMyNick] = useState("");
   const [replyTo, setReplyTo] = useState<string>("");
   const [isAd, setIsAd] = useState(false);
-  const [forceNextSend, setForceNextSend] = useState(false); // bypass idempotency once on resend prefill
+  const [forceNextSend, setForceNextSend] = useState(false); // 재발송 prefill 시 멱등성 우회 1회
+  const [followupOf, setFollowupOf] = useState<string | undefined>(undefined);
+  const [hydrated, setHydrated] = useState(false);
+  /** Selected email's body has an unsubscribe link (null = unknown/loading). */
+  const [hasUnsub, setHasUnsub] = useState<boolean | null>(null);
+  const [saveList, setSaveList] = useState<{ rows: Recipient[]; replaceAdhoc: boolean } | null>(null);
+  const [lastSendAdhoc, setLastSendAdhoc] = useState<Recipient[]>([]);
   const [me, setMe] = useState<string>("");
   const [isAdmin, setIsAdmin] = useState(false);
   const [maxRecipients, setMaxRecipients] = useState<number>(1000);
@@ -73,12 +96,11 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
   const [currentSendId, setCurrentSendId] = useState<string | null>(null);
   const [aborting, setAborting] = useState(false);
   const [notice, setNotice] = useState<string>("");
+  const [scheduledNotice, setScheduledNotice] = useState(false);
 
-  // Popup state — every step's list/input UI is delegated to a popup.
+  // 팝업 상태 — 각 단계의 목록/입력 UI 는 전부 팝업으로 위임
   const [createOpen, setCreateOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [composer, setComposer] = useState<{ open: boolean; editName: string | null }>({ open: false, editName: null });
-  const [htmlEditName, setHtmlEditName] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [listSelectOpen, setListSelectOpen] = useState(false);
   const [listEditor, setListEditor] = useState<{ slug: string | null } | null>(null);
@@ -87,6 +109,34 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
 
   const resultRef = useRef<HTMLDivElement>(null);
 
+  // Restore this tab's selections, then apply "?select=<id>" (studio "save" returns here with it).
+  useEffect(() => {
+    const p = readPersisted();
+    if (p.selected) setSelected(p.selected);
+    if (Array.isArray(p.selectedListSlugs)) setSelectedListSlugs(p.selectedListSlugs);
+    if (Array.isArray(p.excludeListSlugs)) setExcludeListSlugs(p.excludeListSlugs);
+    if (typeof p.adhoc === "string") setAdhoc(p.adhoc);
+    if (p.from) setFrom(p.from);
+    if (typeof p.replyTo === "string") setReplyTo(p.replyTo);
+    if (typeof p.isAd === "boolean") setIsAd(p.isAd);
+    try {
+      const url = new URL(window.location.href);
+      const sel = url.searchParams.get("select");
+      if (sel) {
+        setSelected(sel);
+        url.searchParams.delete("select");
+        window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const data: Persisted = { selected, selectedListSlugs, excludeListSlugs, adhoc, from, replyTo, isAd };
+    try { sessionStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
+  }, [hydrated, selected, selectedListSlugs, excludeListSlugs, adhoc, from, replyTo, isAd]);
+
   useEffect(() => { loadTemplates(); loadLists(); }, []);
   useEffect(() => { loadConfig(); }, [configReloadKey]);
 
@@ -94,14 +144,18 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
   useEffect(() => {
     if (!prefill) return;
     if (prefill.template) setSelected(prefill.template);
+    // Re-send targets replace the whole recipient selection — a list left selected from an
+    // earlier send would otherwise go out again to everyone on it.
+    setSelectedListSlugs([]);
+    setExcludeListSlugs([]);
     if (prefill.adhoc !== undefined) setAdhoc(prefill.adhoc);
+    setFollowupOf(prefill.followupOf);
     if (prefill.isAd !== undefined) setIsAd(prefill.isAd);
     if (prefill.from) setFrom(prefill.from);
     if (prefill.replyTo !== undefined) setReplyTo(prefill.replyTo);
     if (prefill.force) setForceNextSend(true);
     setNotice(
-      `재발송 대상이 ‘직접 입력’ 칸에 채워졌습니다 (이름 포함).` +
-      `${prefill.isAd ? " 광고성·" : " "}발신자·회신 설정이 원본에서 승계되었습니다. 확인 후 발송하세요.`
+      `재발송 대상 직접 입력 칸에 반영 · 기존 리스트 선택 해제 · 발신자·회신${prefill.isAd ? "·광고성" : ""} 설정 원본 유지`
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.nonce]);
@@ -147,7 +201,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
 
   // Safety net: correct the `from` if one passed in via prefill (resend inheritance) etc. is no longer usable.
   // (Since the server rejects unregistered senders with 400, fix it here in advance instead of silently sending wrong.)
-  // For your own address (differing only in display name), remap to your personal option rather than launch@.
+  // For your own address (differing only in display name), remap to your personal option rather than the default sender.
   useEffect(() => {
     if (!from || fromOptions.length === 0) return;
     if (fromOptions.some((o) => o.value === from)) return;
@@ -159,8 +213,8 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
     setFrom(next);
     // Append rather than overwrite an existing notice (e.g. the resend guidance).
     const msg = myOption
-      ? "원본 발신 이름을 사용할 수 없어 내 계정 발신자로 대체했습니다."
-      : "선택했던 발신자를 사용할 수 없어 기본 발신자로 대체했습니다. 발송 전 발신자를 확인하세요.";
+      ? "원본 발신 이름 사용 불가 · 내 계정 발신자로 대체"
+      : "선택한 발신자 사용 불가 · 기본 발신자로 대체";
     setNotice((prev) => (prev ? `${prev} ⚠ ${msg}` : `⚠ ${msg}`));
   }, [from, fromOptions, fromDefault, me]);
 
@@ -189,57 +243,87 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
     }
   }
 
-  // Edit an email — composed (block) ones go to the block composer, raw-HTML ones to AddTemplateDialog.
   function editTemplate(name: string) {
-    const t = templates.find((x) => x.name === name);
-    if (t?.composed) setComposer({ open: true, editName: name });
-    else setHtmlEditName(name);
+    window.location.href = `/studio?edit=${encodeURIComponent(name)}`;
   }
 
-  // Member preview for the selected lists — preserves selection order (same address in multiple
-  // lists keeps the first-selected list's name).
+  // 선택된 리스트들의 멤버 프리뷰 — 선택 순서 유지 (동일 주소는 먼저 선택한 리스트 이름 우선)
+  // + 제외 리스트의 멤버(이번 발송에서 뺄 주소)
+  const membersSeq = useRef(0);
+  /** (Re)load members of selected + excluded lists. Also called right before the confirm screen opens,
+   *  because anyone may add members to a list while this page sits open. */
+  const fetchMembers = useCallback(async () => {
+    const my = ++membersSeq.current;
+    const all = [...selectedListSlugs, ...excludeListSlugs];
+    if (all.length === 0) { setListMembersPreview([]); setExcludedListEmails(new Set()); return; }
+    const qs = `with=members&slugs=${all.map(encodeURIComponent).join(",")}`;
+    const r = await fetch(`/api/lists?${qs}`).catch(() => null);
+    if (!r || !r.ok) return;
+    const j = await r.json();
+    if (my !== membersSeq.current) return; // a newer load superseded this one
+    const bySlug = new Map<string, any>((j.lists ?? []).map((l: any) => [l.slug, l]));
+    const collected: { email: string; name?: string; company?: string; title?: string; listSlug: string }[] = [];
+    for (const slug of selectedListSlugs) {
+      for (const m of bySlug.get(slug)?.members ?? []) collected.push({ email: m.email, name: m.name, company: m.company, title: m.title, listSlug: slug });
+    }
+    const excl = new Set<string>();
+    for (const slug of excludeListSlugs) for (const m of bySlug.get(slug)?.members ?? []) excl.add(String(m.email).toLowerCase());
+    setListMembersPreview(collected);
+    setExcludedListEmails(excl);
+  }, [selectedListSlugs, excludeListSlugs]);
+
+  useEffect(() => { fetchMembers(); }, [fetchMembers, lists]);
+
+  async function openConfirm() {
+    await fetchMembers();
+    setConfirmOpen(true);
+  }
+
+  // 선택한 이메일 본문에 수신거부 링크가 있는지 (광고성 발송 안내용)
   useEffect(() => {
-    if (selectedListSlugs.length === 0) { setListMembersPreview([]); return; }
+    setHasUnsub(null);
+    if (!selected) return;
     let cancel = false;
-    (async () => {
-      const qs = `with=members&slugs=${selectedListSlugs.map(encodeURIComponent).join(",")}`;
-      const r = await fetch(`/api/lists?${qs}`);
-      if (!r.ok) return;
-      const j = await r.json();
-      const collected: { email: string; name?: string; listSlug: string }[] = [];
-      for (const l of j.lists ?? []) {
-        for (const m of l.members ?? []) collected.push({ email: m.email, name: m.name, listSlug: l.slug });
-      }
-      if (!cancel) setListMembersPreview(collected);
-    })();
+    fetch(`/api/templates?built=${encodeURIComponent(selected)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (!cancel && j?.html) setHasUnsub(String(j.html).includes("%%UNSUB_URL%%")); })
+      .catch(() => {});
     return () => { cancel = true; };
-  }, [selectedListSlugs, lists]);
+  }, [selected]);
 
   const tmplObj = templates.find((t) => t.name === selected);
 
-  // Ad-hoc text is the single source — parsed straight from it even while the popup is closed
-  // (e.g. resend prefill) so the row count is always current.
+  // 직접 입력은 텍스트가 단일 소스 — 팝업이 닫혀 있어도(재발송 prefill 등) 항상 파싱 결과가 최신.
   const adhocRows = useMemo(() => parseRecipientGrid(adhoc).rows, [adhoc]);
 
   const mergedRecipients = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { email: string; name?: string; source: string }[] = [];
+    const seen = new Set<string>(excludedListEmails);
+    const out: { email: string; name?: string; company?: string; title?: string; source: string }[] = [];
     for (const m of listMembersPreview) {
       const e = m.email.toLowerCase();
       if (seen.has(e)) continue;
       seen.add(e);
-      out.push({ email: e, name: m.name, source: m.listSlug });
+      out.push({ email: e, name: m.name, company: m.company, title: m.title, source: m.listSlug });
     }
     for (const r of adhocRows) {
       const e = r.email.toLowerCase();
       if (seen.has(e)) continue;
       seen.add(e);
-      out.push({ email: e, name: r.name, source: "ad-hoc" });
+      out.push({ email: e, name: r.name, company: r.company, title: r.title, source: "ad-hoc" });
     }
     return out;
-  }, [listMembersPreview, adhocRows]);
+  }, [listMembersPreview, adhocRows, excludedListEmails]);
 
-  // Deduped member count for the lists alone (for the list-picker popup's summary).
+  // 제외 리스트 때문에 빠지는 인원 (선택·직접 입력에 있던 사람 중)
+  const excludedCount = useMemo(() => {
+    if (excludedListEmails.size === 0) return 0;
+    const all = new Set([...listMembersPreview.map((m) => m.email.toLowerCase()), ...adhocRows.map((r) => r.email.toLowerCase())]);
+    let n = 0;
+    all.forEach((e) => { if (excludedListEmails.has(e)) n++; });
+    return n;
+  }, [excludedListEmails, listMembersPreview, adhocRows]);
+
+  // 리스트만의 중복 제거 인원 (리스트 선택 팝업의 합계 요약용)
   const listUniqueCount = useMemo(
     () => new Set(listMembersPreview.map((m) => m.email.toLowerCase())).size,
     [listMembersPreview]
@@ -249,20 +333,22 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
   const overCap = validCount > maxRecipients;
 
   let disabledReason = "";
-  if (!selected) disabledReason = "이메일을 선택하세요";
-  else if (validCount === 0) disabledReason = "리스트를 선택하거나 수신자를 입력하세요";
-  else if (overCap) disabledReason = `1회 최대 ${maxRecipients}명 (현재 ${validCount}명)`;
-  else if (!from) disabledReason = "발신자를 선택하세요";
+  if (!selected) disabledReason = "① 이메일 선택";
+  else if (validCount === 0) disabledReason = excludedCount > 0 ? "제외 리스트 적용 후 수신자 없음" : "② 수신자 선택";
+  else if (overCap) disabledReason = `1회 최대 ${maxRecipients}명 초과 (현재 ${validCount}명)`;
+  else if (!from) disabledReason = "③ 발신자 선택";
   const canSend = !disabledReason && !sending;
   const canTest = !!selected && !!me && !sending;
 
-  async function runSend(opts?: { testToSelf?: boolean }) {
+  async function runSend(opts?: { testToSelf?: boolean } & ConfirmResult) {
     const testToSelf = !!opts?.testToSelf;
+    const scheduledAt = testToSelf ? undefined : opts?.scheduledAt;
     setSending(true);
     setEvents([]);
     setConfirmOpen(false);
     setCurrentSendId(null);
     setNotice("");
+    setScheduledNotice(false);
     try {
       const r = await fetch("/api/send", {
         method: "POST",
@@ -270,9 +356,15 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         body: JSON.stringify({
           template: selected,
           listSlugs: testToSelf ? [] : selectedListSlugs,
+          excludeListSlugs: testToSelf ? [] : excludeListSlugs,
           adhoc: testToSelf ? "" : adhoc,
+          excludeEmails: testToSelf ? [] : (opts?.excludeEmails ?? []),
+          // What the confirm screen showed; the server refuses if a list changed in between.
+          expectedEmails: testToSelf ? undefined : mergedRecipients.map((m) => m.email),
           from, replyTo, isAd,
           force: testToSelf ? false : forceNextSend,
+          followupOf: testToSelf ? undefined : followupOf,
+          scheduledAt,
           testToSelf,
         }),
       });
@@ -280,8 +372,19 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
       if (!r.ok && r.headers.get("content-type")?.includes("json")) {
         const j = await r.json();
         if (j.duplicate) { setNotice(j.error ?? "중복 발송이 차단되었습니다."); return; }
+        if (j.recipientsChanged) { setNotice(j.error); await fetchMembers(); return; }
         throw new Error(j.error ?? `HTTP ${r.status}`);
       }
+      if (scheduledAt) {
+        const j = await r.json();
+        setNotice(`예약 완료 · ${j.scheduledAtKst} KST · ${j.recipients}명`);
+        setScheduledNotice(true);
+        setForceNextSend(false);
+        setFollowupOf(undefined);
+        onScheduled?.();
+        return;
+      }
+      if (!testToSelf) setLastSendAdhoc(adhocRows);
       if (!r.body) throw new Error("스트림 없음");
       const reader = r.body.getReader();
       const dec = new TextDecoder();
@@ -307,7 +410,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
     } finally {
       setSending(false);
       setAborting(false);
-      if (!testToSelf) setForceNextSend(false); // idempotency bypass applies only once, right after a resend
+      if (!testToSelf) { setForceNextSend(false); setFollowupOf(undefined); } // 재발송 표시·멱등성 우회는 1회만
     }
   }
 
@@ -336,6 +439,20 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
     .map((slug) => lists.find((l) => l.slug === slug))
     .filter((l): l is ListRow => !!l);
   const selectedListNames = selectedLists.map((l) => l.name);
+  const excludedLists = excludeListSlugs
+    .map((slug) => lists.find((l) => l.slug === slug))
+    .filter((l): l is ListRow => !!l);
+
+  function defaultListName(): string {
+    const d = new Date();
+    return `${tmplObj?.title ?? "직접 입력"} 수신자 ${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  /** Turn the ad-hoc recipients into a saved list and select it instead (same recipients). */
+  function onAdhocSavedAsList(slug: string, clearAdhoc: boolean) {
+    setSelectedListSlugs((cur) => (cur.includes(slug) ? cur : [...cur, slug]));
+    if (clearAdhoc) setAdhoc("");
+    loadLists();
+  }
 
   const sharedOptions = fromOptions.filter((o) => o.scope !== "personal");
   const myOption = fromOptions.find((o) => o.scope === "personal");
@@ -351,13 +468,13 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
 
   return (
     <div className="h-full grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] card overflow-hidden">
-      {/* ─────────── LEFT: 3 steps — fits on one screen without scrolling ─────────── */}
+      {/* ─────────── LEFT: 3단계 설정 — 스크롤 없이 한 화면 ─────────── */}
       <div className="lg:border-r border-border bg-surface p-5 flex flex-col gap-6 overflow-y-auto">
-        {/* ① Email */}
+        {/* ① 이메일 */}
         <section className="space-y-2.5">
           <StepHead n={1} title="이메일 선택" />
-          <p className="text-[11px] text-muted truncate">
-            💡 팀원이 만든 이메일까지 모두 목록에 보여요 · 삭제는 만든 사람만
+          <p className="text-[12px] text-muted truncate">
+            팀원 이메일 포함 · 복제 가능
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => setCreateOpen(true)} className="btn-ghost text-xs justify-center py-2">
@@ -374,14 +491,14 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
             <div className="relative rounded-xl border border-brand bg-brand/5 ring-1 ring-brand/30">
               <button onClick={() => setPickerOpen(true)} className="w-full text-left p-3 pr-10" title="다른 이메일 선택">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[12px] text-text/90 truncate">{tmplObj.name}</span>
+                  <span className="text-[13px] font-semibold text-text/90 truncate">{tmplObj.title}</span>
                   {tmplObj.composed && <span className="chip shrink-0">블록</span>}
                 </div>
-                <div className="text-[12px] text-text/70 mt-1 truncate">{tmplObj.subject}</div>
+                <div className="text-[12px] text-text/70 mt-1 truncate">제목: {tmplObj.subject}</div>
               </button>
               <button
                 onClick={() => editTemplate(tmplObj.name)}
-                title={tmplObj.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"}
+                title="스튜디오에서 수정"
                 className="icon-btn absolute top-2.5 right-2 text-muted/60 hover:text-brand"
               >
                 <EditIcon />
@@ -409,7 +526,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
             <StepHead n={2} title="수신자" />
             {validCount > 0 && (
               <span className="text-[11px] text-muted tabular-nums">
-                총 <b className={overCap ? "text-red-500" : "text-brand"}>{validCount}</b>명 · 중복 제외{overCap ? ` · 최대 ${maxRecipients}` : ""}
+                총 <b className={overCap ? "text-red-500" : "text-brand"}>{validCount}</b>명 · 중복 제외{excludedCount > 0 ? ` · 제외 리스트로 ${excludedCount}명 뺌` : ""}{overCap ? ` · 최대 ${maxRecipients}` : ""}
               </span>
             )}
           </div>
@@ -433,6 +550,16 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
                   onClick={() => setSelectedListSlugs((cur) => cur.filter((s) => s !== l.slug))}
                   className="text-muted hover:text-red-500"
                   title="선택 해제"
+                >✕</button>
+              </span>
+            ))}
+            {excludedLists.map((l) => (
+              <span key={l.slug} className="chip border-red-400/50 text-red-600" title="해당 리스트의 인원은 발송 대상에서 제외됩니다">
+                <span className="truncate max-w-[120px]">제외: {l.name}</span>
+                <button
+                  onClick={() => setExcludeListSlugs((cur) => cur.filter((s) => s !== l.slug))}
+                  className="text-muted hover:text-red-500"
+                  title="제외 해제"
                 >✕</button>
               </span>
             ))}
@@ -528,8 +655,13 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
             title="제목에 (광고) 자동 표기 (정보통신망법). 외부 수신자 대상 홍보·행사 초청이면 체크."
           >
             <input type="checkbox" checked={isAd} onChange={(e) => setIsAd(e.target.checked)} />
-            <span className="truncate">광고성 메일 (제목에 자동 표기)</span>
+            <span className="truncate">광고성 메일 (제목에 (광고) 자동 표기)</span>
           </label>
+          {isAd && hasUnsub === false && (
+            <p className="text-[12px] text-amber-700 bg-amber-400/10 border border-amber-400/30 rounded-lg px-2.5 py-1.5 leading-relaxed">
+              수신거부 링크 없음 · 하단에 기본 수신거부 문구 자동 추가
+            </p>
+          )}
         </section>
       </div>
 
@@ -538,7 +670,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         <div className="px-6 py-3 border-b border-border flex items-center justify-between gap-4 shrink-0">
           <div className="min-w-0">
             <div className="kicker">Preview Canvas</div>
-            <h2 className="text-base font-bold truncate mt-0.5">{tmplObj?.subject || "이메일을 선택하세요"}</h2>
+            <h2 className="text-base font-bold truncate mt-0.5">{tmplObj ? tmplObj.title : "이메일을 선택하세요"}</h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {previewUrl && (
@@ -550,27 +682,31 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
             <button disabled={!canTest} onClick={() => runSend({ testToSelf: true })} className="btn-ghost text-xs" title={me ? `${me} 에게만 테스트 발송` : "로그인 필요"}>
               ✉ 나에게 테스트
             </button>
-            <div className="relative group">
-              <button
-                disabled={!canSend}
-                onClick={() => setConfirmOpen(true)}
-                className="btn-primary !px-3 flex items-center gap-1.5"
-                title={disabledReason || (sending ? "발송 중…" : `${validCount}명에게 발송`)}
-                aria-label="발송"
-              >
-                {sending ? <SpinnerIcon /> : <SendIcon />}
-                {!sending && validCount > 0 && <span className={`text-[12px] font-bold tabular-nums ${overCap ? "text-red-200" : ""}`}>{validCount}명</span>}
-              </button>
-              {disabledReason && !sending && (
-                <div className="hidden group-hover:block absolute top-full mt-1 right-0 text-[11px] bg-bg border border-border rounded-lg px-2 py-1 whitespace-nowrap text-muted shadow z-10">{disabledReason}</div>
-              )}
-            </div>
+            <button
+              disabled={!canSend}
+              onClick={openConfirm}
+              className="btn-primary !px-3 flex items-center gap-1.5"
+              title={disabledReason || (sending ? "발송 중…" : `${validCount}명에게 발송 또는 예약`)}
+            >
+              {sending ? <SpinnerIcon /> : <SendIcon />}
+              <span className="text-[13px] font-bold tabular-nums">
+                {sending ? "발송 중…" : validCount > 0 ? `${validCount}명에게 발송` : "발송"}
+              </span>
+            </button>
           </div>
         </div>
+        {disabledReason && !sending && (
+          <div className="px-6 py-1.5 border-b border-border text-[12px] text-amber-700 bg-amber-400/5 text-right shrink-0">
+            필요: <b>{disabledReason}</b>
+          </div>
+        )}
 
         {notice && (
-          <div className="mx-6 mt-3 text-[12px] text-amber-700 bg-amber-400/10 border border-amber-400/30 rounded-lg px-3 py-2 flex items-start gap-2">
+          <div className={`mx-6 mt-3 text-[12px] rounded-lg px-3 py-2 flex items-start gap-2 ${scheduledNotice ? "text-brand bg-brand/10 border border-brand/30" : "text-amber-700 bg-amber-400/10 border border-amber-400/30"}`}>
             <span className="flex-1">{notice}</span>
+            {scheduledNotice && onOpenSchedules && (
+              <button onClick={onOpenSchedules} className="underline shrink-0">예약 발송 보기</button>
+            )}
             <button onClick={() => setNotice("")} className="text-muted hover:text-text shrink-0">✕</button>
           </div>
         )}
@@ -636,10 +772,21 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
                     <button onClick={() => navigator.clipboard?.writeText(doneEv.failedEmails.join("\n"))} className="text-[11px] text-red-500 hover:underline" title="실패한 이메일 클립보드 복사">📋 실패 {doneEv.failedEmails.length}건 복사</button>
                   )}
                 </div>
-                <button onClick={() => { if (!sending) setEvents([]); }} disabled={sending} className="text-[11px] text-muted hover:text-text disabled:opacity-30">지우기</button>
+                <span className="flex items-center gap-3">
+                  {doneEv && onOpenHistory && infoEv?.kind !== "test" && (
+                    <button onClick={onOpenHistory} className="text-[12px] text-brand hover:underline">발송 이력에서 보기</button>
+                  )}
+                  <button onClick={() => { if (!sending) setEvents([]); }} disabled={sending} className="text-[12px] text-muted hover:text-text disabled:opacity-30">지우기</button>
+                </span>
               </div>
               {infoEv && (infoEv.excludedSuppressed ?? 0) > 0 && (
-                <div className="text-[11px] text-amber-600 mb-1">· 수신거부/반송 {infoEv.excludedSuppressed}명 자동 제외됨</div>
+                <div className="text-[12px] text-amber-600 mb-1">· 수신거부/반송 {infoEv.excludedSuppressed}명 자동 제외됨</div>
+              )}
+              {doneEv && infoEv?.kind !== "test" && lastSendAdhoc.length > 0 && (
+                <div className="text-[12px] mb-1.5 flex items-center gap-2 rounded-lg bg-brand/5 border border-brand/20 px-2.5 py-1.5">
+                  <span className="flex-1">직접 입력 {lastSendAdhoc.length}명</span>
+                  <button className="text-brand underline shrink-0" onClick={() => setSaveList({ rows: lastSendAdhoc, replaceAdhoc: false })}>리스트로 저장</button>
+                </div>
               )}
               <div ref={resultRef} className="space-y-1 max-h-40 overflow-y-auto font-mono text-[11px]">
                 {events.length > 200 && <div className="text-muted text-[10px]">… 이전 {events.length - 200}건 생략 (전체 결과는 발송 이력에서 확인)</div>}
@@ -650,25 +797,16 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         )}
       </div>
 
-      {/* ─────────── popups ─────────── */}
+      {/* ─────────── 팝업들 ─────────── */}
       <CreateEmailDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}
-        onCreate={() => { setCreateOpen(false); setComposer({ open: true, editName: null }); }}
         onUpload={() => { setCreateOpen(false); setUploadOpen(true); }}
       />
 
       <AddTemplateDialog
-        open={uploadOpen || !!htmlEditName}
-        editName={htmlEditName}
-        onClose={() => { setUploadOpen(false); setHtmlEditName(null); }}
-        onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
-      />
-
-      <TemplateComposer
-        open={composer.open}
-        editName={composer.editName}
-        onClose={() => setComposer({ open: false, editName: null })}
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
         onSaved={(savedName) => { loadTemplates(); if (savedName) setSelected(savedName); }}
       />
 
@@ -680,7 +818,7 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         isAdmin={isAdmin}
         onSelect={(name) => { setSelected(name); setPickerOpen(false); }}
         onEdit={editTemplate}
-        onChanged={loadTemplates}
+        onChanged={async (selectName) => { await loadTemplates(); if (selectName) setSelected(selectName); }}
         onClose={() => setPickerOpen(false)}
       />
 
@@ -688,6 +826,8 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         open={listSelectOpen}
         lists={lists}
         selected={selectedListSlugs}
+        excluded={excludeListSlugs}
+        onExcludeChange={setExcludeListSlugs}
         dedupedCount={listUniqueCount}
         me={me}
         isAdmin={isAdmin}
@@ -719,8 +859,19 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
         value={adhoc}
         count={adhocRows.length}
         onTextChange={setAdhoc}
+        onSaveAsList={() => { setAdhocOpen(false); setSaveList({ rows: adhocRows, replaceAdhoc: true }); }}
         onClose={() => setAdhocOpen(false)}
       />
+
+      {saveList && (
+        <SaveAsListDialog
+          rows={saveList.rows}
+          defaultName={defaultListName()}
+          // From the ad-hoc popup the list replaces the typed text; after a finished send nothing else changes.
+          onSaved={(slug) => { if (saveList.replaceAdhoc) onAdhocSavedAsList(slug, true); else loadLists(); setLastSendAdhoc([]); }}
+          onClose={() => setSaveList(null)}
+        />
+      )}
 
       <SenderDialog
         open={senderOpen}
@@ -733,14 +884,17 @@ export default function SendForm({ prefill, configReloadKey = 0 }: Props) {
       {confirmOpen && (
         <ConfirmSendModal
           template={selected}
+          templateTitle={tmplObj?.title ?? selected}
           subject={tmplObj?.subject || ""}
           isAd={isAd}
           from={from}
           replyTo={replyTo}
           listNames={selectedListNames}
+          excludedListNames={excludedLists.map((l) => l.name)}
+          excludedByListCount={excludedCount}
           recipients={mergedRecipients}
           onClose={() => setConfirmOpen(false)}
-          onConfirm={() => runSend()}
+          onConfirm={(res: ConfirmResult) => { runSend(res); }}
         />
       )}
     </div>
@@ -789,6 +943,8 @@ function EventRow({ e }: { e: SendEvent }) {
         ▶ {e.subject} → {e.valid}명 발송 시작
         {e.adhoc.duplicates.length > 0 && ` (중복 ${e.adhoc.duplicates.length} 제거)`}
         {e.adhoc.invalid.length > 0 && ` (형식오류 ${e.adhoc.invalid.length} 제외)`}
+        {(e.excludedByList ?? 0) > 0 && ` (제외 리스트 ${e.excludedByList} 뺌)`}
+        {(e.excludedManually ?? 0) > 0 && ` (이미 받은 사람 ${e.excludedManually} 뺌)`}
       </div>
     );
   }
@@ -804,9 +960,12 @@ function EventRow({ e }: { e: SendEvent }) {
   if (e.type === "fail") {
     return <div className="text-red-500">✗ <span className="text-text/90">{e.to}</span> — {e.error}</div>;
   }
+  if (e.type === "skip") {
+    return <div className="text-amber-600">– <span className="text-text/90">{e.to}</span> — {e.reason}</div>;
+  }
   return (
     <div className="text-brand mt-2 pt-2 border-t border-border">
-      ━ {e.aborted ? "중단됨" : "완료"}: 성공 {e.ok} / 실패 {e.fail} / 총 {e.total}
+      ━ {e.aborted ? "중단됨" : "완료"}: 성공 {e.ok} / 실패 {e.fail}{(e.skipped ?? 0) > 0 ? ` / 미발송 ${e.skipped}` : ""} / 총 {e.total}
     </div>
   );
 }

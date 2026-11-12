@@ -30,3 +30,15 @@ describe("deriveBaseSlug — 한글 전용 이름도 항상 유효 슬러그", (
     expect(s.startsWith("list-")).toBe(true);
   });
 });
+
+import { mergeMembers } from "./lists";
+describe("mergeMembers", () => {
+  it("adds new, keeps existing, fills blank names", () => {
+    const { members, added } = mergeMembers(
+      [{ email: "a@x.com" }, { email: "b@x.com", name: "B" }],
+      [{ email: "A@x.com", name: "Alice" }, { email: "b@x.com", name: "Other" }, { email: "c@x.com" }, { email: "bad" }],
+    );
+    expect(added).toBe(1);
+    expect(members).toEqual([{ email: "a@x.com", name: "Alice" }, { email: "b@x.com", name: "B" }, { email: "c@x.com" }]);
+  });
+});

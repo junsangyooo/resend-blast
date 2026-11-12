@@ -1,30 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useEscClose } from "./hooks";
 import TrackingSidebar, { type FollowupPayload } from "./TrackingSidebar";
+import ScheduledSends from "./ScheduledSends";
+import { useEscClose } from "./hooks";
 import { brand } from "@/brand.config";
 
 type Sender = { value: string; label: string; builtin?: boolean; scope?: "shared" | "personal"; owner?: string };
-type Suppression = { email: string; reason: string; at: string; source?: string };
+type Suppression = { email: string; reason: string; at: string; source?: string; updatedAt?: string };
 type AdminEntry = { email: string; seed: boolean };
 
 const REASON_LABEL: Record<string, string> = {
-  unsubscribe: "수신거부", bounced: "반송", complained: "스팸신고", manual: "수동",
+  unsubscribe: "수신거부", bounced: "반송", complained: "스팸신고", manual: "직접 추가",
 };
 
-type Tab = "history" | "suppression" | "senders" | "admins";
+export type SettingsTab = "history" | "schedules" | "suppression" | "senders" | "admins";
+type Tab = SettingsTab;
 
 /**
- * Settings — send history (default tab, everyone) + unsubscribe/bounce (everyone)
- * + sender management (admin) + admin management (admin).
- * The sender/admin tabs are shown locked to non-admins and cannot be selected.
- * The server enforces permissions, so this UI is for convenience.
+ * 설정 — 발송 이력(기본 탭, 전원) + 예약 발송(전원) + 수신거부/반송(전원)
+ *        + 발신자 관리(관리자) + 관리자 관리(관리자).
+ * 발신자/관리자 탭은 비관리자에게 자물쇠로 표시되고 선택 불가.
+ * 서버가 권한을 강제하므로 여기 UI 는 편의 제공.
  */
 export default function AdminSettings({
-  open, isAdmin = false, onClose, onChanged, onFollowup,
+  open, initialTab = "history", isAdmin = false, onClose, onChanged, onFollowup, onSchedulesChanged,
 }: {
   open: boolean;
+  /** Tab to show when opened (top-bar shortcuts open history/schedules directly). */
+  initialTab?: Tab;
+  /** Schedules were changed (canceled, rescheduled…) — refresh the top-bar badge. */
+  onSchedulesChanged?: () => void;
   isAdmin?: boolean;
   onClose: () => void;
   onChanged?: () => void;
@@ -40,18 +46,20 @@ export default function AdminSettings({
   const [newAdmin, setNewAdmin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [lockPopup, setLockPopup] = useState<string | null>(null); // popup that briefly appears when a locked tab is clicked
+  const [lockPopup, setLockPopup] = useState<string | null>(null); // 잠긴 탭 클릭 시 잠깐 뜨는 팝업
+  const [suppEmail, setSuppEmail] = useState("");
+  const [suppNote, setSuppNote] = useState("");
 
   useEscClose(open, onClose);
 
   useEffect(() => {
     if (!open) return;
     setErr("");
-    setTab("history");
+    setTab(initialTab);
     refresh();
     // isAdmin may arrive after the /api/config response, so include it in deps — refetch even if it becomes true late.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isAdmin]);
+  }, [open, isAdmin, initialTab]);
 
   async function refresh() {
     const [s, u, a] = await Promise.all([
@@ -102,7 +110,24 @@ export default function AdminSettings({
     finally { setBusy(false); }
   }
 
-  async function unsuppress(email: string) {
+  async function addSuppression() {
+    setErr(""); setBusy(true);
+    try {
+      const r = await fetch("/api/suppression", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: suppEmail.trim(), note: suppNote.trim() }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "추가 실패");
+      setSuppEmail(""); setSuppNote("");
+      await refresh();
+    } catch (e: any) { setErr(e?.message ?? "추가 실패"); }
+    finally { setBusy(false); }
+  }
+
+  async function unsuppress(email: string, reason: string) {
+    if ((reason === "complained" || reason === "bounced") &&
+      !window.confirm(`${email} 은(는) ${REASON_LABEL[reason]}으로 막힌 주소입니다. 정말 해제할까요? 다시 보내면 평판이 나빠질 수 있습니다.`)) return;
     setBusy(true);
     try {
       const r = await fetch(`/api/suppression?email=${encodeURIComponent(email)}`, { method: "DELETE" });
@@ -173,7 +198,7 @@ export default function AdminSettings({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="card w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="card w-full max-w-3xl h-[84vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <div className="kicker">Settings</div>
@@ -184,6 +209,7 @@ export default function AdminSettings({
 
         <div className="px-5 pt-3 flex gap-2 shrink-0">
           {tabBtn("history", "발송 이력")}
+          {tabBtn("schedules", "예약 발송")}
           {tabBtn("suppression", `수신거부/반송 (${supps.length})`)}
           {isAdmin ? tabBtn("senders", `발신자 관리 (${sharedSenders.length})`) : lockedTabBtn("senders", "발신자 관리")}
           {isAdmin ? tabBtn("admins", `관리자 (${admins.length})`) : lockedTabBtn("admins", "관리자")}
@@ -192,28 +218,43 @@ export default function AdminSettings({
         {err && <div className="mx-5 mt-3 text-[12px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{err}</div>}
 
         {tab === "history" ? (
-          // TrackingSidebar manages its own scrolling/polling — fill without a padded wrapper.
+          // 발송 이력은 TrackingSidebar 가 자체 스크롤/폴링을 관리 — 패딩 래퍼 없이 채운다.
           <div className="flex-1 min-h-0">
             <TrackingSidebar active={open} reloadKey={0} onFollowup={onFollowup} />
+          </div>
+        ) : tab === "schedules" ? (
+          <div className="flex-1 min-h-0">
+            <ScheduledSends active={open} onChanged={onSchedulesChanged} onFollowup={onFollowup} />
           </div>
         ) : (
         <div className="flex-1 overflow-y-auto p-5 space-y-3">
           {tab === "suppression" && (
             <>
-              <p className="text-[11px] text-muted">수신거부·반송·스팸신고된 주소는 다음 발송에서 자동 제외됩니다.{isAdmin ? " 오등록이면 해제하세요." : ""}</p>
+              <p className="text-[12px] text-muted">
+                수신거부·반송·스팸신고된 주소는 어떤 발신자로 보내든 다음 발송에서 자동 제외됩니다.{isAdmin ? " 오등록이면 해제하세요." : ""}
+              </p>
+              <div className="card p-3 space-y-2 bg-surface2/30">
+                <div className="text-[12px] text-muted">메일·전화 등으로 받은 수신거부 요청 직접 추가</div>
+                <div className="flex gap-2">
+                  <input className="input py-1.5 text-[12px] font-mono flex-1" value={suppEmail} onChange={(e) => setSuppEmail(e.target.value)} placeholder="name@example.com" />
+                  <input className="input py-1.5 text-[12px] flex-1" value={suppNote} onChange={(e) => setSuppNote(e.target.value)} placeholder="메모 (선택) 예: 메일로 요청" />
+                  <button onClick={addSuppression} disabled={busy || !suppEmail.trim()} className="btn-primary text-xs shrink-0">추가</button>
+                </div>
+              </div>
               {supps.length === 0 ? (
                 <div className="text-xs text-muted text-center py-10 border border-dashed border-border rounded-xl">억제된 주소가 없습니다.</div>
               ) : (
                 <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full text-[12px]">
-                    <thead className="bg-surface2/50 text-[10px] text-muted"><tr><th className="px-3 py-1.5 text-left">이메일</th><th className="px-3 py-1.5 text-left">사유</th><th className="px-3 py-1.5 text-right"></th></tr></thead>
+                    <thead className="bg-surface2/50 text-[11px] text-muted"><tr><th className="px-3 py-1.5 text-left">이메일</th><th className="px-3 py-1.5 text-left">사유</th><th className="px-3 py-1.5 text-left">날짜</th><th className="px-3 py-1.5 text-right"></th></tr></thead>
                     <tbody>
                       {supps.map((s) => (
                         <tr key={s.email} className="border-t border-border">
                           <td className="px-3 py-1.5 font-mono text-text/90 truncate">{s.email}</td>
-                          <td className="px-3 py-1.5 text-muted">{REASON_LABEL[s.reason] ?? s.reason}</td>
+                          <td className="px-3 py-1.5 text-muted" title={s.source}>{REASON_LABEL[s.reason] ?? s.reason}</td>
+                          <td className="px-3 py-1.5 text-muted tabular-nums">{new Date(s.updatedAt ?? s.at).toLocaleDateString("ko-KR")}</td>
                           <td className="px-3 py-1.5 text-right">
-                            {isAdmin && <button onClick={() => unsuppress(s.email)} disabled={busy} className="text-[11px] text-muted hover:text-brand">해제</button>}
+                            {isAdmin && <button onClick={() => unsuppress(s.email, s.reason)} disabled={busy} className="text-[11px] text-muted hover:text-brand">해제</button>}
                           </td>
                         </tr>
                       ))}

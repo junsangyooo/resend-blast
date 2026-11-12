@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyUnsubToken } from "@/lib/unsubscribe";
-import { unsuppress, isSuppressed } from "@/lib/suppression";
+import { unsuppress, getSuppression, canSelfResubscribe } from "@/lib/suppression";
 import { brand } from "@/brand.config";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +40,12 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
   const v = verifyUnsubToken(token, "resub");
   if (!v) return html(page("링크가 유효하지 않습니다", "재구독 링크가 올바르지 않습니다."), 400);
-  if (!(await isSuppressed(v.email))) {
+  const entry = await getSuppression(v.email);
+  if (!entry) {
     return html(page("이미 구독 중입니다", "이 주소는 이미 메일을 받고 있습니다.", { email: v.email }));
+  }
+  if (!canSelfResubscribe(entry.reason)) {
+    return html(page("재구독할 수 없습니다", `이 주소는 반송 또는 스팸 신고로 발송이 중단되었습니다. 다시 받으시려면 ${brand.senders.contactEmail} 로 문의해 주세요.`, { email: v.email }));
   }
   return html(page("다시 구독", "아래 버튼을 누르면 다시 메일을 받게 됩니다.", { token, email: v.email }));
 }
@@ -50,6 +54,8 @@ export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
   const v = verifyUnsubToken(token, "resub");
   if (!v) return NextResponse.json({ ok: false }, { status: 400 });
+  const entry = await getSuppression(v.email);
+  if (entry && !canSelfResubscribe(entry.reason)) return NextResponse.json({ ok: false, error: "재구독할 수 없는 주소" }, { status: 403 });
   await unsuppress(v.email);
   const accepts = req.headers.get("accept") ?? "";
   if (accepts.includes("text/html")) {

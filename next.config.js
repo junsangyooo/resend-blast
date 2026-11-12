@@ -15,6 +15,9 @@ const securityHeaders = [
 
 module.exports = {
   reactStrictMode: true,
+  // Next 14: instrumentation.ts only runs with this flag. It starts the send scheduler and
+  // the stale-send cleanup at boot (without it, scheduled sends would never fire).
+  experimental: { instrumentationHook: true },
   poweredByHeader: false,
   async headers() {
     return [

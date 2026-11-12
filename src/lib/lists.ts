@@ -1,12 +1,13 @@
 /**
- * Recipient lists — first-class objects.
- * Storage: data/lists/{slug}.json (atomic write, lock per single file)
- * Permissions: anyone can view/edit; only the creator (createdBy) can delete.
+ * 수신자 리스트 — 1급 객체.
+ * 저장: data/lists/{slug}.json (atomic write, 단일 파일 단위 락)
+ * 권한: 조회·멤버 추가는 누구나. 이름·설명 변경, 멤버 삭제·수정, 리스트 삭제는 생성자 또는 관리자만.
  */
 import fs from "fs/promises";
 import path from "path";
 import { atomicWrite, withFileLock, readJsonSafe } from "./atomic";
-import { dedupeRecipients, type Recipient } from "./recipients";
+import { dedupeRecipients, mergeMembers, type Recipient } from "./recipients";
+export { mergeMembers } from "./recipients";
 import { canManageAsync } from "./admins";
 
 const LISTS_DIR = path.join(process.cwd(), "data", "lists");
@@ -39,9 +40,9 @@ export function slugify(s: string): string {
 }
 
 /**
- * Derive a base slug from the name (or an explicit slug).
- * When slugify yields an empty result (e.g. pure Korean), generate a fallback (`list-<seed>`) —
- * the slug is only an internal filename/key while the name is what's shown, so an arbitrary slug is fine.
+ * 이름(또는 명시적 slug)에서 베이스 슬러그 도출.
+ * 순수 한글 등으로 slugify 결과가 비면 fallback(`list-<seed>`)을 생성한다 —
+ * 슬러그는 내부 파일명/키일 뿐이고 화면엔 name 이 표시되므로 임의 슬러그로 충분하다.
  */
 export function deriveBaseSlug(name: string, slug?: string, fallbackSeed?: string): string {
   const base = slug ? slugify(slug) : slugify(name);
@@ -141,27 +142,18 @@ export async function updateList(
   });
 }
 
-export async function importMembers(
-  slug: string,
-  members: Recipient[],
-  mode: "merge" | "replace",
-  actorEmail?: string
-): Promise<List> {
+/**
+ * Add members to a list — allowed for anyone (late registrants can be added to a teammate's list).
+ * Existing members are kept as-is, except empty name/company/title get filled from the new rows.
+ */
+export async function addListMembers(slug: string, rows: Recipient[], actorEmail?: string): Promise<{ list: List; added: number }> {
   return withFileLock(`lists:${slug}`, async () => {
     const cur = await getList(slug);
     if (!cur) throw new Error("리스트를 찾을 수 없습니다");
-    if (!(await canManageAsync(cur.createdBy, actorEmail))) {
-      throw new Error("이 리스트를 수정할 권한이 없습니다 (생성자 또는 관리자만 가능).");
-    }
-    const combined = mode === "replace" ? members : [...cur.members, ...members];
-    const next: List = {
-      ...cur,
-      members: dedupeRecipients(combined),
-      updatedAt: new Date().toISOString(),
-      updatedBy: actorEmail ?? cur.updatedBy,
-    };
+    const { members, added } = mergeMembers(cur.members, rows);
+    const next: List = { ...cur, members, updatedAt: new Date().toISOString(), updatedBy: actorEmail ?? cur.updatedBy };
     await atomicWrite(pathFor(slug), JSON.stringify(next, null, 2));
-    return next;
+    return { list: next, added };
   });
 }
 
@@ -170,31 +162,21 @@ export async function deleteList(slug: string, requesterEmail: string): Promise<
     const cur = await getList(slug);
     if (!cur) return;
     if (!(await canManageAsync(cur.createdBy, requesterEmail))) {
-      throw new Error("생성자 또는 관리자만 리스트를 삭제할 수 있습니다");
+      throw new Error("리스트를 삭제할 권한이 없습니다 (생성자 또는 관리자만 가능).");
     }
     await fs.unlink(pathFor(slug));
   });
 }
 
-/** Merge members from multiple lists and dedupe (used at send time). */
-export async function resolveListMembers(slugs: string[]): Promise<Recipient[]> {
-  const all: Recipient[] = [];
-  for (const s of slugs) {
-    const l = await getList(s);
-    if (l) all.push(...l.members);
-  }
-  return dedupeRecipients(all);
-}
-
 /**
- * Merge members from multiple lists, returning each member's **first matching list slug**.
- * Even if a person belongs to both A and B, they're labeled with the first matched list
- * (for origin display in the tracking sidebar). Dedupe is performed as well.
+ * 여러 리스트의 멤버를 합치면서 각 멤버의 **첫 매칭 리스트 슬러그**를 함께 반환.
+ * 한 사람이 A·B 양쪽 멤버여도 처음 매칭된 리스트로 라벨링 (트래킹 사이드바의 출처 표시용).
+ * dedupe 도 함께 수행.
  */
 export async function resolveListMembersWithOrigin(
   slugs: string[]
-): Promise<{ email: string; name?: string; listSlug: string }[]> {
-  const out: { email: string; name?: string; listSlug: string }[] = [];
+): Promise<{ email: string; name?: string; company?: string; title?: string; listSlug: string }[]> {
+  const out: { email: string; name?: string; company?: string; title?: string; listSlug: string }[] = [];
   const seen = new Set<string>();
   for (const s of slugs) {
     const l = await getList(s);
@@ -203,7 +185,7 @@ export async function resolveListMembersWithOrigin(
       const e = (m.email ?? "").toLowerCase().trim();
       if (!e || seen.has(e)) continue;
       seen.add(e);
-      out.push({ email: e, name: m.name, listSlug: s });
+      out.push({ email: e, name: m.name, company: m.company, title: m.title, listSlug: s });
     }
   }
   return out;

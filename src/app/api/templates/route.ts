@@ -37,9 +37,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const actor = await requireUserEmail();
-    const { name, subject, body, description, overwrite } = await req.json();
-    await saveTemplate(name, subject, body, description ?? "", actor, { overwrite: !!overwrite });
-    return NextResponse.json({ ok: true });
+    const { name, subject, body, description, overwrite, title } = await req.json();
+    const saved = await saveTemplate(name, subject, body, description ?? "", actor, {
+      overwrite: !!overwrite,
+      ...(title !== undefined ? { title: String(title) } : {}),
+    });
+    return NextResponse.json({ ok: true, name: saved });
   } catch (e: any) {
     const msg = e?.message ?? "save failed";
     const status = msg.includes("권한") ? 403 : msg.includes("이미 같은 이름") ? 409 : 400;

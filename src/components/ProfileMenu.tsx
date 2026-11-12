@@ -7,9 +7,9 @@ import { useEscClose } from "./hooks";
 export type UserProfile = { name?: string | null; picture?: string | null };
 
 /**
- * Top bar profile menu — clicking the round avatar opens a settings/theme/logout
- * dropdown (replaces the old left rail). Falls back to an initial-letter avatar
- * when there's no picture (password mode) or it fails to load.
+ * 탑바 우측 프로필 메뉴 — 구글 프로필 원형 아바타를 누르면
+ * 설정 / 테마 / 로그아웃 드롭다운이 열린다 (구 좌측 레일 대체).
+ * 사진이 없거나 로드 실패하면 이니셜 아바타로 폴백.
  */
 export default function ProfileMenu({
   me, profile, onOpenSettings, onLogout,

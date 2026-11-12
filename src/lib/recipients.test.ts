@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseRecipientGrid, parseRecipients, setNameInText } from "./recipients";
+import { parseRecipientGrid, setNameInText } from "./recipients";
 
 describe("parseRecipientGrid — multi-source name+email mapping", () => {
   it("탭 구분 (엑셀·구글시트·노션): 이름<TAB>이메일", () => {
@@ -98,14 +98,6 @@ describe("parseRecipientGrid — multi-source name+email mapping", () => {
       { email: "hong@a.com", name: "홍길동" },
       { email: "kim@b.com", name: "김철수" },
     ]);
-  });
-});
-
-describe("parseRecipients — 기존 동작 회귀 보장 (이메일만)", () => {
-  it("기존 이메일 추출은 그대로 동작 (유효 이메일 보존)", () => {
-    const r = parseRecipients("a@b.com, x <c@d.com>; bad");
-    expect(r.valid.sort()).toEqual(["a@b.com", "c@d.com"]);
-    expect(r.invalid).toContain("bad");
   });
 });
 

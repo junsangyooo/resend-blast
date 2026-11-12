@@ -15,7 +15,10 @@ const DEFAULT_DESCRIPTION = "";
 const FONT_FAMILY = "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif";
 
 export type TemplateMeta = {
+  /** Internal id (file name). Not shown to users. */
   name: string;
+  /** What users see: explicit title, else the legacy name, else the subject. */
+  title: string;
   subject: string;
   description: string;
   size: number;
@@ -28,6 +31,8 @@ export type TemplateMeta = {
 // A leftover `archived` flag from the old archive feature may still exist in _meta.json,
 // but it's ignored now (all emails are always shown in the list).
 type MetaEntry = {
+  /** User-facing display name (free text, editable). */
+  title?: string;
   subject?: string;
   description?: string;
   createdBy?: string;
@@ -35,6 +40,24 @@ type MetaEntry = {
   lastModifiedAt?: string;
 };
 type MetaFile = Record<string, MetaEntry>;
+
+const NAME_RE = /^[A-Za-z0-9_-]+$/;
+const AUTO_ID_RE = /^e-\d{8}-[a-z0-9]{4}$/;
+
+/** New internal id, e.g. "e-20261111-k3x9". Users never type or see it. */
+export function newTemplateId(now: Date = new Date()): string {
+  const d = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const r = Math.random().toString(36).slice(2, 6).padEnd(4, "0");
+  return `e-${d}-${r}`;
+}
+
+/** Display title rule (pure): explicit title → legacy hand-typed name → subject. */
+export function displayTitle(name: string, m: { title?: string; subject?: string }): string {
+  const t = m.title?.trim();
+  if (t) return t;
+  if (!AUTO_ID_RE.test(name)) return name;
+  return m.subject?.trim() || name;
+}
 
 async function readMeta(): Promise<MetaFile> {
   try {
@@ -75,6 +98,7 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
     const m = meta[name] ?? {};
     out.push({
       name,
+      title: displayTitle(name, m),
       subject: m.subject ?? DEFAULT_SUBJECT,
       description: m.description ?? DEFAULT_DESCRIPTION,
       size: stat.size,
@@ -84,9 +108,10 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
       lastModifiedAt: m.lastModifiedAt,
     });
   }
-  return out.sort((a, b) => a.name.localeCompare(b.name));
+  return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 
+/** Meta of one email (for title/modified-time lookups). */
 export async function getTemplateBody(name: string): Promise<string | null> {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) return null;
   try {
@@ -108,12 +133,12 @@ function wrapHtml(subject: string, bodyInner: string): string {
   );
 }
 
-export async function buildFullHtml(name: string): Promise<{ subject: string; html: string } | null> {
+export async function buildFullHtml(name: string): Promise<{ subject: string; html: string; title: string; lastModifiedAt?: string } | null> {
   const body = await getTemplateBody(name);
   if (!body) return null;
-  const meta = await readMeta();
-  const subject = meta[name]?.subject ?? DEFAULT_SUBJECT;
-  return { subject, html: wrapHtml(subject, body) };
+  const m = (await readMeta())[name] ?? {};
+  const subject = m.subject ?? DEFAULT_SUBJECT;
+  return { subject, html: wrapHtml(subject, body), title: displayTitle(name, m), lastModifiedAt: m.lastModifiedAt };
 }
 
 /** Render a spec (JSON) straight to full HTML without saving (for preview). Legacy specs are migrated to the tree. */
@@ -149,17 +174,26 @@ async function assertNotDuplicate(name: string, overwrite: boolean): Promise<voi
   }
 }
 
-/** Save block-composer output: {name}.json(spec) + {name}.html(render) + _meta.json(subject/description+audit). */
+/** 블록 조립기 결과 저장: {name}.json(spec) + {name}.html(렌더) + _meta.json(제목/설명+감사). */
+/** Resolve the id for a save: existing id when editing, a fresh auto id for new emails. */
+function resolveSaveName(name: string | undefined, overwrite: boolean): string {
+  const n = String(name ?? "").trim();
+  if (overwrite) {
+    if (!NAME_RE.test(n)) throw new Error("잘못된 이메일 ID");
+    return n;
+  }
+  // New email: ids are generated. A hand-typed name is still accepted (legacy upload API).
+  return n && NAME_RE.test(n) ? n : newTemplateId();
+}
+
 export async function saveComposedTemplate(
-  name: string,
+  rawName: string | undefined,
   spec: TemplateSpec,
   description = "",
   actorEmail?: string,
-  opts: { overwrite?: boolean } = {},
-) {
-  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
-    throw new Error("이메일 이름은 영문/숫자/하이픈/언더스코어만 가능합니다");
-  }
+  opts: { overwrite?: boolean; title?: string } = {},
+): Promise<string> {
+  const name = resolveSaveName(rawName, !!opts.overwrite);
   if (!spec || !Array.isArray(spec.blocks) || spec.blocks.length === 0) {
     throw new Error("블록이 하나도 없습니다");
   }
@@ -178,6 +212,7 @@ export async function saveComposedTemplate(
     const prev = m[name] ?? {};
     m[name] = {
       ...prev,
+      ...(opts.title !== undefined ? { title: opts.title.trim() || undefined } : {}),
       subject: spec.subject.trim(),
       description: description.trim(),
       createdBy: prev.createdBy ?? actorEmail,
@@ -186,27 +221,29 @@ export async function saveComposedTemplate(
     };
     return m;
   });
+  return name;
 }
 
 export async function saveTemplate(
-  name: string,
+  rawName: string | undefined,
   subject: string,
   body: string,
   description = "",
   actorEmail?: string,
-  opts: { overwrite?: boolean } = {},
-) {
-  if (!/^[A-Za-z0-9_-]+$/.test(name)) {
-    throw new Error("이메일 이름은 영문/숫자/하이픈/언더스코어만 가능합니다");
-  }
+  opts: { overwrite?: boolean; title?: string } = {},
+): Promise<string> {
+  const name = resolveSaveName(rawName, !!opts.overwrite);
   if (!body.trim()) throw new Error("본문이 비어 있습니다");
   await assertNotDuplicate(name, !!opts.overwrite);
   await assertCanManageTemplate(name, actorEmail);
   await atomicWrite(path.join(TEMPLATES_DIR, `${name}.html`), body);
+  // Converting a block email to plain HTML: drop the spec so it is edited as HTML from now on.
+  await fs.unlink(path.join(TEMPLATES_DIR, `${name}.json`)).catch(() => {});
   await mutateMeta((m) => {
     const prev = m[name] ?? {};
     m[name] = {
       ...prev,
+      ...(opts.title !== undefined ? { title: opts.title.trim() || undefined } : {}),
       subject: subject.trim() || DEFAULT_SUBJECT,
       description: description.trim(),
       createdBy: prev.createdBy ?? actorEmail,
@@ -215,10 +252,37 @@ export async function saveTemplate(
     };
     return m;
   });
+  return name;
 }
 
-/** Permanent delete: removes {name}.html + {name}.json + the _meta entry. Irreversible.
- *  Creator/admin only — legacy entries with no recorded creator require admin (avoids accidental deletion). */
+/** Copy an email (html + spec) into a new id. Anyone may duplicate; the copy belongs to the actor. */
+export async function duplicateTemplate(name: string, actorEmail?: string): Promise<{ name: string; title: string }> {
+  if (!NAME_RE.test(name)) throw new Error("잘못된 이메일 ID");
+  const body = await getTemplateBody(name);
+  if (body === null) throw new Error("원본 이메일을 찾을 수 없습니다");
+  const spec = await getTemplateSpec(name);
+  const src = (await readMeta())[name] ?? {};
+  const id = newTemplateId();
+  const title = `${displayTitle(name, src)} (사본)`;
+  await atomicWrite(path.join(TEMPLATES_DIR, `${id}.html`), body);
+  if (spec) await atomicWrite(path.join(TEMPLATES_DIR, `${id}.json`), JSON.stringify(spec, null, 2));
+  const now = new Date().toISOString();
+  await mutateMeta((m) => {
+    m[id] = {
+      title,
+      subject: src.subject ?? DEFAULT_SUBJECT,
+      description: src.description ?? "",
+      createdBy: actorEmail,
+      lastModifiedBy: actorEmail,
+      lastModifiedAt: now,
+    };
+    return m;
+  });
+  return { name: id, title };
+}
+
+/** 영구 삭제: {name}.html + {name}.json + _meta 항목 제거. 되돌릴 수 없음.
+ *  생성자/관리자만 — 생성자 기록이 없는 레거시 항목은 관리자만 (오삭제 방지). */
 export async function deleteTemplate(name: string, actorEmail?: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
   const owner = (await readMeta())[name]?.createdBy;

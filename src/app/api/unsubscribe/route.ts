@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Unsubscribe (public — bypasses middleware, authenticity verified by token signature).
- * - GET  : confirmation page (POST button). GET alone does not suppress (prevents false unsubscribes from mail-scanner prefetch).
- * - POST : actual suppression handling. Gmail/Yahoo's List-Unsubscribe-Post (One-Click) also arrives as POST.
+ * 수신거부 (공개 — 미들웨어 bypass, 토큰 서명으로 진위 검증).
+ * - GET  : 확인 페이지(POST 버튼). GET 자체로는 억제하지 않음(메일 스캐너의 prefetch 로 인한 오거부 방지).
+ * - POST : 실제 억제 처리. Gmail/Yahoo 의 List-Unsubscribe-Post(One-Click) 도 POST 로 도달.
  */
 function page(title: string, msg: string, opts?: { token?: string; email?: string }): string {
   const form = opts?.token
@@ -41,27 +41,27 @@ export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
   const v = verifyUnsubToken(token, "unsub");
   if (!v) return html(page("링크가 유효하지 않습니다", "수신거부 링크가 만료되었거나 올바르지 않습니다. 메일의 링크를 다시 눌러 주세요."), 400);
-  return html(page("수신거부", "아래 버튼을 누르면 앞으로 이 발신자의 메일을 받지 않습니다.", { token, email: v.email }));
+  return html(page("수신거부", `아래 버튼을 누르면 앞으로 ${brand.identity.companyName}에서 보내는 메일을 받지 않습니다.`, { token, email: v.email }));
 }
 
 export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
   const v = verifyUnsubToken(token, "unsub");
   if (!v) {
-    // One-Click POST expects 200, so even on a bad token, finish without leaking information.
+    // 위조·손상된 토큰 — 아무것도 억제하지 않고 400 (정보 노출 없음).
     return NextResponse.json({ ok: false }, { status: 400 });
   }
-  // If already suppressed, don't send a duplicate confirmation email (prevents repeated clicks/scanners).
+  // 이미 억제 상태면 확인 메일 중복 발송 안 함(반복 클릭/스캐너 방지).
   const already = await isSuppressed(v.email);
   await suppress(v.email, "unsubscribe", `send:${v.sendId}`);
   if (!already) {
-    // Confirmation email (includes resubscribe button) — best-effort; unsubscribe stays valid even on failure.
+    // 확인 메일(재구독 버튼 포함) — best-effort, 실패해도 수신거부는 유효.
     await sendUnsubscribeConfirmation(v.email, resubscribeUrl(v.email, v.sendId)).catch(() => {});
   }
 
   const accepts = req.headers.get("accept") ?? "";
   if (accepts.includes("text/html")) {
-    return html(page("수신거부 완료", "앞으로 이 발신자의 메일을 받지 않습니다. 그동안 관심 가져주셔서 감사합니다.", { email: v.email }));
+    return html(page("수신거부 완료", `앞으로 ${brand.identity.companyName}에서 보내는 메일을 받지 않습니다. 그동안 관심 가져주셔서 감사합니다.`, { email: v.email }));
   }
   return NextResponse.json({ ok: true });
 }

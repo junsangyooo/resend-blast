@@ -1,20 +1,11 @@
 /**
- * Hook that runs once on Next.js server boot.
- * - Cleans up `running` sends that died mid-send by marking them aborted (data/sends/*.json).
- * - fs is inaccessible on the Edge runtime → only runs on the nodejs runtime.
+ * Next.js 서버 부팅 시 1회 실행되는 hook (Next 14 는 next.config 의 experimental.instrumentationHook 필요).
+ * 실제 작업은 lib/boot.ts — NEXT_RUNTIME 조건 블록 안에서만 import 해야 Edge 번들에서 빠진다
+ * (early return 형태로 쓰면 webpack 이 fs 를 Edge 용으로도 해석하려다 빌드가 깨진다).
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
-  try {
-    const { cleanupStaleSends } = await import("./lib/send-log");
-    const fixed = await cleanupStaleSends();
-    if (fixed > 0) {
-      // eslint-disable-next-line no-console
-      console.log(`[instrumentation] cleaned up ${fixed} stale running send(s)`);
-    }
-  } catch (e) {
-    // Don't block boot. There's a lazy cleanup backup during route handling too (/api/sends).
-    // eslint-disable-next-line no-console
-    console.warn("[instrumentation] cleanupStaleSends failed:", e);
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { boot } = await import("./lib/boot");
+    await boot();
   }
 }

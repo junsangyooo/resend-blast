@@ -10,5 +10,5 @@ export async function GET(req: NextRequest) {
   if (!name) return NextResponse.json({ error: "name 없음" }, { status: 400 });
   const spec = await getTemplateSpec(name);
   const meta = (await listTemplates()).find((t) => t.name === name);
-  return NextResponse.json({ spec, description: meta?.description ?? "" });
+  return NextResponse.json({ spec, description: meta?.description ?? "", title: meta?.title ?? name, lastModifiedAt: meta?.lastModifiedAt ?? null });
 }

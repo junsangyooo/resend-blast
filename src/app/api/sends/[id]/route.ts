@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSend, buildResendIdIndex, updateSend, requestAbort, computeMetrics } from "@/lib/send-log";
+import { getSend, buildResendIdIndex, updateSend, requestAbort, computeMetrics, shouldApplyLiveStatus } from "@/lib/send-log";
 import { requireUserEmail } from "@/lib/auth";
 import { canManageAsync } from "@/lib/admins";
+import { cancelSchedule, rescheduleSend, removeScheduledRecipient, refreshScheduledList, refreshScheduledContent } from "@/lib/schedule-ops";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -16,14 +17,14 @@ type ResendEmail = {
 };
 
 /**
- * Single send detail.
- * - ?withStatus=1 : query Resend for each resendId's status, merge it, and persist to the record (guards against live status being lost after 30 days).
- * - ?format=csv   : download per-recipient status as CSV.
- * PATCH { abort: true } : request to stop an in-progress send.
+ * 단일 send 상세.
+ * - ?withStatus=1 : Resend 에 각 resendId 상태를 조회해 머지 + 레코드에 영속(라이브 상태 30일 유실 대비).
+ * - ?format=csv   : 수신자별 상태 CSV 다운로드.
+ * PATCH { abort: true } : 진행 중 발송 중단 요청.
  */
 const STATUS_CACHE = new Map<string, { at: number; status: string }>();
 const CACHE_TTL_MS = 5_000;
-const FETCH_CONCURRENCY = 6; // Protect Resend rate-limit (~10/sec): concurrent query cap
+const FETCH_CONCURRENCY = 6; // Resend rate-limit(초당 ~10) 보호: 동시 조회 상한
 
 async function fetchStatus(key: string, resendId: string): Promise<string> {
   const c = STATUS_CACHE.get(resendId);
@@ -41,12 +42,12 @@ async function fetchStatus(key: string, resendId: string): Promise<string> {
   } catch {
     s = "unknown";
   }
-  // Cache both success and failure (including unknown) — so the next poll doesn't immediately stampede again on 429/errors.
+  // 성공/실패 모두 캐시(unknown 포함) — 429/에러 시 다음 폴링이 즉시 재폭주하지 않게 한다.
   STATUS_CACHE.set(resendId, { at: Date.now(), status: s });
   return s;
 }
 
-/** Concurrency-limited map — keeps the N+1 fetch from hitting Resend all at once. */
+/** 동시성 제한 map — N+1 fetch 가 Resend 를 한꺼번에 때리지 않게 한다. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const rows = send.recipients.map((r) =>
       [r.email, r.name ?? "", r.listSlug ?? "", r.status, r.liveStatus ?? "", r.error ?? "", r.sentAt ?? ""].map(csvCell).join(",")
     );
-    const csv = "﻿" + [header.join(","), ...rows].join("\n"); // BOM for Excel (Korean)
+    const csv = "﻿" + [header.join(","), ...rows].join("\n"); // BOM for Excel(한글)
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -101,12 +102,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   );
   const statusMap = new Map(results.map((r) => [r.id, r.status]));
 
-  // Persist live status to the record (guards against Resend's 30-day retention limit). unknown is not stored.
+  // 라이브 상태를 레코드에 영속(Resend 30일 보존 한계 대비). unknown 은 저장 안 함.
   const at = new Date().toISOString();
   const persisted = await updateSend(params.id, (r) => ({
     ...r,
     recipients: r.recipients.map((x) =>
       x.resendId && statusMap.has(x.resendId) && statusMap.get(x.resendId) !== "unknown"
+        && shouldApplyLiveStatus(x.liveStatus, statusMap.get(x.resendId)!)
         ? { ...x, liveStatus: statusMap.get(x.resendId), liveStatusAt: at }
         : x
     ),
@@ -129,16 +131,31 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));
-  if (!body?.abort) return NextResponse.json({ error: "지원하지 않는 작업" }, { status: 400 });
 
-  // Permission: only the sender themselves or an admin can abort (IDOR prevention — block aborting someone else's send).
+  // 권한: 발송자 본인 또는 관리자만 (IDOR 방지 — 남의 발송·예약 조작 차단).
   const rec = await getSend(params.id);
   if (!rec) return NextResponse.json({ error: "발송 기록 없음" }, { status: 404 });
   if (!(await canManageAsync(rec.sentBy, actor))) {
-    return NextResponse.json({ error: "본인 또는 관리자만 발송을 중단할 수 있습니다" }, { status: 403 });
+    return NextResponse.json({ error: "보낸 사람 또는 관리자만 할 수 있습니다" }, { status: 403 });
   }
 
-  const r = await requestAbort(params.id);
-  if (!r) return NextResponse.json({ error: "중단할 수 없습니다 (이미 종료됨)" }, { status: 400 });
-  return NextResponse.json({ ok: true, status: r.status, abortRequested: r.abortRequested });
+  try {
+    if (body?.abort) {
+      const r = await requestAbort(params.id);
+      if (!r) return NextResponse.json({ error: "중단할 수 없습니다 (이미 종료됨)" }, { status: 400 });
+      return NextResponse.json({ ok: true, status: r.status, abortRequested: r.abortRequested });
+    }
+    if (body?.cancel) return NextResponse.json({ ok: true, send: await cancelSchedule(params.id, actor) });
+    if (typeof body?.scheduledAt === "string") return NextResponse.json({ ok: true, send: await rescheduleSend(params.id, body.scheduledAt) });
+    if (typeof body?.removeRecipient === "string") return NextResponse.json({ ok: true, send: await removeScheduledRecipient(params.id, body.removeRecipient) });
+    if (typeof body?.refreshList === "string") return NextResponse.json({ ok: true, ...(await refreshScheduledList(params.id, body.refreshList)) });
+    if (body?.refreshContent) return NextResponse.json({ ok: true, send: await refreshScheduledContent(params.id) });
+    if (body?.acknowledge) {
+      const r = await updateSend(params.id, (x) => ({ ...x, problemAcknowledged: true }));
+      return NextResponse.json({ ok: true, send: r });
+    }
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message ?? "실패" }, { status: 400 });
+  }
+  return NextResponse.json({ error: "지원하지 않는 작업" }, { status: 400 });
 }

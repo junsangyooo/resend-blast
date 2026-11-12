@@ -36,7 +36,16 @@ describe("fillPlaceholders", () => {
   });
 
   it("leaves unknown tokens untouched", () => {
-    expect(fillPlaceholders("{{company}}", { name: "Kim" })).toBe("{{company}}");
+    expect(fillPlaceholders("{{department}}", { name: "Kim" })).toBe("{{department}}");
+  });
+
+  it("supports {{company}} / {{title}}", () => {
+    expect(fillPlaceholders("{{company}} · {{title}}", { company: "RLWRLD", title: "PM" })).toBe("RLWRLD · PM");
+  });
+
+  it("missing company/title becomes empty string, fallback works", () => {
+    expect(fillPlaceholders("[{{company}}]", {})).toBe("[]");
+    expect(fillPlaceholders("[{{title|팀원}}]", {})).toBe("[팀원]");
   });
 });
 

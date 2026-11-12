@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useEscClose } from "./hooks";
 
 export type PickerTemplate = {
+  /** Internal id. */
   name: string;
+  /** Display name. */
+  title: string;
   subject: string;
   description: string;
   composed: boolean;
@@ -13,9 +16,10 @@ export type PickerTemplate = {
 };
 
 /**
- * Email picker popup — every email is always shown (no archive concept).
- * Row click = select, right-side actions = edit / permanent delete.
- * Delete is only shown to the creator/admin, and the server (deleteTemplate) enforces the same.
+ * 이메일 선택 팝업 — 모든 이메일이 항상 노출된다(보관함 개념 없음).
+ * 행 클릭 = 선택, 우측 액션 = 스튜디오 편집 / 영구 삭제.
+ * 삭제 버튼은 만든 사람·관리자에게만 보이며 서버(deleteTemplate)도 동일하게 강제한다.
+ * 복제는 누구나 — 사본은 복제한 사람 소유가 되고 목록 맨 위에 선택된 채로 나타난다.
  */
 export default function EmailPickerDialog({
   open, templates, selected, me, isAdmin, onSelect, onEdit, onChanged, onClose,
@@ -27,7 +31,8 @@ export default function EmailPickerDialog({
   isAdmin: boolean;
   onSelect: (name: string) => void;
   onEdit: (name: string) => void;
-  onChanged: () => void;
+  /** Called after a list change; with the new id after a duplicate (so the caller can select it). */
+  onChanged: (selectName?: string) => void;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -46,13 +51,29 @@ export default function EmailPickerDialog({
       (a, b) => (b.lastModifiedAt ?? "").localeCompare(a.lastModifiedAt ?? "") || a.name.localeCompare(b.name)
     );
     const q = query.trim().toLowerCase();
-    return q ? sorted.filter((t) => `${t.name} ${t.subject} ${t.description}`.toLowerCase().includes(q)) : sorted;
+    return q ? sorted.filter((t) => `${t.title} ${t.subject} ${t.description}`.toLowerCase().includes(q)) : sorted;
   }, [templates, query]);
 
   if (!open) return null;
 
   const canDelete = (t: PickerTemplate) =>
     isAdmin || (!!t.createdBy && !!me && t.createdBy.toLowerCase() === me.toLowerCase());
+
+  async function duplicate(name: string) {
+    setBusy(name); setErr("");
+    try {
+      const r = await fetch("/api/templates/duplicate", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error ?? "복제 실패");
+      onChanged(j.name);
+    } catch (e: any) {
+      setErr(e?.message ?? "복제 실패");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function del(name: string) {
     setBusy(name); setErr("");
@@ -113,21 +134,24 @@ export default function EmailPickerDialog({
                   active ? "border-brand bg-brand/5 ring-1 ring-brand/30" : "border-border hover:border-brand/40"
                 }`}
               >
-                <button onClick={() => onSelect(t.name)} className="w-full text-left p-3.5 pr-[76px]">
+                <button onClick={() => onSelect(t.name)} className="w-full text-left p-3.5 pr-[104px]">
                   <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-[12px] text-text/90 truncate">{t.name}</span>
+                    <span className="text-[13px] font-semibold text-text/90 truncate">{t.title}</span>
                     {t.composed && <span className="chip shrink-0">블록</span>}
                     {active && <span className="chip shrink-0 border-brand/40 text-brand">선택됨</span>}
                   </div>
-                  <div className="text-[12px] text-text/70 mt-1 truncate">{t.subject}</div>
-                  <div className="text-[10px] text-muted mt-0.5 truncate">
+                  <div className="text-[12px] text-text/70 mt-1 truncate">제목: {t.subject}</div>
+                  <div className="text-[11px] text-muted mt-0.5 truncate">
                     {t.description && <span>{t.description} · </span>}
                     {t.createdBy ? `만든 사람 ${t.createdBy.split("@")[0]}` : "만든 사람 미기록"}
                   </div>
                 </button>
 
                 <div className="absolute top-2.5 right-2.5 flex items-center gap-0.5">
-                  <button onClick={() => onEdit(t.name)} title={t.composed ? "블록 편집기에서 수정" : "HTML 본문 수정"} className="icon-btn text-muted/60 hover:text-brand">
+                  <button onClick={() => duplicate(t.name)} disabled={busy === t.name} title="복제해서 새 이메일 만들기" className="icon-btn text-muted/60 hover:text-brand">
+                    <CopyIcon />
+                  </button>
+                  <button onClick={() => onEdit(t.name)} title="스튜디오에서 수정" className="icon-btn text-muted/60 hover:text-brand">
                     <EditIcon />
                   </button>
                   {canDelete(t) && (
@@ -177,6 +201,15 @@ function TrashIcon() {
     <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
       <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </svg>
   );
 }

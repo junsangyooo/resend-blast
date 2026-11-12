@@ -13,17 +13,21 @@ export type ListRow = {
 };
 
 /**
- * List picker popup — checkbox multi-select + per-row edit/delete (replaces the separate
- * management screen). Selecting multiple lists dedupes by email; when the same address is
- * in more than one list, the first-selected list's name wins (the row's order badge = priority).
+ * 리스트 선택 팝업 — 체크박스 다중 선택 + 행별 수정/삭제 (별도 관리 화면 대체).
+ * 여러 리스트 선택 시 이메일 기준 중복 제거되며, 같은 주소가 여러 리스트에 있으면
+ * 먼저 선택한 리스트의 이름이 우선 적용된다 (행의 순번 배지 = 우선순위).
+ * '제외'로 지정한 리스트의 멤버는 다른 리스트·직접 입력에 있어도 이번 발송에서 빠진다.
  */
 export default function ListSelectDialog({
-  open, lists, selected, dedupedCount, me, isAdmin, onChange, onEdit, onCreate, onChanged, onClose,
+  open, lists, selected, excluded, dedupedCount, me, isAdmin, onChange, onExcludeChange, onEdit, onCreate, onChanged, onClose,
 }: {
   open: boolean;
   lists: ListRow[];
   selected: string[];
-  /** Deduped-by-email member count across the selected lists (parent computes it from the member preview). */
+  /** Lists whose members are removed from the send. */
+  excluded: string[];
+  onExcludeChange: (slugs: string[]) => void;
+  /** 선택된 리스트들의 이메일 기준 중복 제거 후 인원 (부모가 멤버 프리뷰로 계산). */
   dedupedCount: number;
   me: string;
   isAdmin: boolean;
@@ -59,7 +63,13 @@ export default function ListSelectDialog({
   const dupExcluded = dedupedCount > 0 && dedupedCount < rawSum ? rawSum - dedupedCount : 0;
 
   function toggle(slug: string) {
+    if (excluded.includes(slug)) onExcludeChange(excluded.filter((s) => s !== slug));
     onChange(selected.includes(slug) ? selected.filter((s) => s !== slug) : [...selected, slug]);
+  }
+  function toggleExclude(slug: string) {
+    if (excluded.includes(slug)) { onExcludeChange(excluded.filter((s) => s !== slug)); return; }
+    if (selected.includes(slug)) onChange(selected.filter((s) => s !== slug));
+    onExcludeChange([...excluded, slug]);
   }
 
   async function del(slug: string) {
@@ -70,6 +80,7 @@ export default function ListSelectDialog({
       if (!r.ok) throw new Error(j.error ?? "삭제 실패");
       setConfirmSlug(null);
       onChange(selected.filter((s) => s !== slug));
+      onExcludeChange(excluded.filter((s) => s !== slug));
       onChanged();
     } catch (e: any) {
       setErr(e?.message ?? "삭제 실패");
@@ -116,12 +127,13 @@ export default function ListSelectDialog({
           )}
           {shown.map((l) => {
             const active = selected.includes(l.slug);
+            const isExcluded = excluded.includes(l.slug);
             const order = selected.indexOf(l.slug);
             const confirming = confirmSlug === l.slug;
             return (
               <div
                 key={l.slug}
-                className={`rounded-xl border transition ${active ? "border-brand bg-brand/5" : "border-border hover:border-brand/40"}`}
+                className={`rounded-xl border transition ${active ? "border-brand bg-brand/5" : isExcluded ? "border-red-400/60 bg-red-500/5" : "border-border hover:border-brand/40"}`}
               >
                 <div className="flex items-center gap-2.5 px-3 py-2.5">
                   <button
@@ -138,7 +150,8 @@ export default function ListSelectDialog({
                     </span>
                     <span className="flex-1 min-w-0">
                       <span className="flex items-center gap-1.5">
-                        <span className="text-[13px] text-text/90 font-medium truncate">{l.name}</span>
+                        <span className={`text-[13px] font-medium truncate ${isExcluded ? "text-red-600 line-through decoration-red-400/60" : "text-text/90"}`}>{l.name}</span>
+                        {isExcluded && <span className="chip shrink-0 border-red-400/50 text-red-600">해당 리스트의 인원은 발송 대상에서 제외됩니다</span>}
                         {active && selected.length > 1 && (
                           <span className="chip shrink-0 border-brand/40 text-brand" title="이름 우선순위 — 같은 주소가 여러 리스트에 있으면 먼저 선택한 리스트의 이름 사용">
                             {order + 1}순위
@@ -150,7 +163,14 @@ export default function ListSelectDialog({
                     <span className="text-[11px] text-muted shrink-0 tabular-nums">{l.memberCount}명</span>
                   </button>
                   <span className="flex items-center gap-0.5 shrink-0">
-                    <button onClick={() => onEdit(l.slug)} title="리스트 수정" className="icon-btn text-muted/60 hover:text-brand">
+                    <button
+                      onClick={() => toggleExclude(l.slug)}
+                      title={isExcluded ? "제외 해제" : "이 리스트의 사람들을 이번 발송에서 빼기"}
+                      className={`text-[11px] px-2 py-1 rounded-lg border mr-1 transition ${isExcluded ? "border-red-400/60 text-red-600 bg-red-500/10" : "border-border text-muted hover:text-red-600 hover:border-red-400/50"}`}
+                    >
+                      {isExcluded ? "제외됨" : "제외"}
+                    </button>
+                    <button onClick={() => onEdit(l.slug)} title={canManage(l) ? "리스트 수정" : "멤버 추가 (수정·삭제는 만든 사람만)"} className="icon-btn text-muted/60 hover:text-brand">
                       <EditIcon />
                     </button>
                     {canManage(l) && (
@@ -194,6 +214,7 @@ export default function ListSelectDialog({
                 )}
               </>
             )}
+            {excluded.length > 0 && <span className="text-red-600"> · 제외 리스트 {excluded.length}개</span>}
           </div>
           <button onClick={onClose} className="btn-primary text-sm shrink-0">완료</button>
         </div>

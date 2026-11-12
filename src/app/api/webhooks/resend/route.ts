@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
-import { applyLiveStatus, invalidateResendIdIndex, buildResendIdIndex } from "@/lib/send-log";
+import { applyLiveStatus, buildResendIdIndex } from "@/lib/send-log";
 import { suppress } from "@/lib/suppression";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Receives Resend webhooks. Persists open/click/bounce/complaint etc. into the send record (guards against the 30-day live-status loss),
- * and adds bounced/complained addresses to the suppression list for automatic exclusion in the next send.
- * Signature: Svix standard (svix-id/svix-timestamp/svix-signature, secret=whsec_...). Disabled (503) when not configured.
- * Middleware-bypass route (no session needed) — authenticity verified by signature.
+ * Resend webhook 수신. open/click/bounce/complaint 등을 send 레코드에 영속(라이브 상태 30일 유실 대비)하고,
+ * bounced/complained 주소는 억제목록에 추가해 다음 발송에서 자동 제외.
+ * 서명: Svix 표준(svix-id/svix-timestamp/svix-signature, secret=whsec_...). 미설정 시 비활성(503).
+ * 미들웨어 bypass 경로(세션 불필요) — 서명으로 진위 검증.
  */
 const EVENT_TO_STATUS: Record<string, string> = {
   "email.sent": "sent",
@@ -50,6 +50,11 @@ export async function POST(req: NextRequest) {
   if (!svixId || !svixTs || !svixSig || !verifySvix(secret, svixId, svixTs, body, svixSig)) {
     return NextResponse.json({ error: "서명 검증 실패" }, { status: 401 });
   }
+  // Replay protection (Svix standard: reject timestamps more than 5 minutes off).
+  const tsSec = Number(svixTs);
+  if (!Number.isFinite(tsSec) || Math.abs(Date.now() / 1000 - tsSec) > 5 * 60) {
+    return NextResponse.json({ error: "오래된 요청" }, { status: 401 });
+  }
 
   let evt: any;
   try { evt = JSON.parse(body); } catch { return NextResponse.json({ error: "bad json" }, { status: 400 }); }
@@ -60,16 +65,19 @@ export async function POST(req: NextRequest) {
   const emailId: string = data.email_id ?? data.id ?? "";
 
   if (status && emailId) {
-    invalidateResendIdIndex();
+    // applyLiveStatus rebuilds the id index only on a miss (no full rescan per event).
     await applyLiveStatus(emailId, status);
   }
 
-  // Bounce/complaint → suppression list (automatically excluded in the next send)
-  if (type === "email.bounced" || type === "email.complained") {
+  // 반송/스팸신고 → 억제목록 (다음 발송에서 자동 제외)
+  // A bounce explicitly marked transient (mailbox full, temporary failure) is not a reason to block the address forever.
+  const bounceType = String(data?.bounce?.type ?? "").toLowerCase();
+  const transient = type === "email.bounced" && (bounceType === "transient" || bounceType === "temporary");
+  if ((type === "email.bounced" && !transient) || type === "email.complained") {
     const reason = type === "email.bounced" ? "bounced" : "complained";
     const tos: string[] = Array.isArray(data.to) ? data.to : data.to ? [data.to] : [];
-    // Resend bounce payloads sometimes have an empty data.to → trace the recipient back via resendId
-    // and suppress without fail (otherwise the next send re-sends to a hard-bounce address, hurting reputation).
+    // Resend 반송 페이로드는 data.to 가 비어있는 경우가 있다 → resendId 로 수신자를 역추적해
+    // 반드시 억제한다(없으면 다음 발송에서 하드바운스 주소로 재발송되어 평판 악화).
     if (tos.length === 0 && emailId) {
       const idx = await buildResendIdIndex();
       const hit = idx.get(emailId);

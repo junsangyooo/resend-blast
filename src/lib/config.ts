@@ -33,14 +33,6 @@ function escapeRegExp(s: string): string {
 }
 const ALLOWED_FROM_DOMAIN = new RegExp(`@${escapeRegExp(brand.auth.senderDomain)}>?\\s*$`, "i");
 
-/** @deprecated Silent fallback risks sender misdelivery — use isSenderAllowedFor in lib/senders.ts
- *  for send validation, and reject unregistered from with 400. */
-export function resolveFrom(input: string | undefined | null): string {
-  const v = String(input ?? "").trim();
-  if (!v) return FROM_DEFAULT;
-  if (BUILTIN_FROM.some((o) => o.value === v)) return v;
-  return FROM_DEFAULT;
-}
 
 /** Safety net: enforce that no from/reply-to outside the sender domain is used by any path. */
 export function isFromAllowed(value: string): boolean {

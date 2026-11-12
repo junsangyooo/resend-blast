@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import StatusGuide from "./StatusGuide";
+import { isUnreachedSkip } from "@/lib/status-text";
 
 type SendMetrics = {
   total: number; sent: number; failed: number;
@@ -15,6 +16,10 @@ type SendSummary = {
   status: "running" | "completed" | "aborted";
   sentBy: string;
   templateName: string;
+  templateTitle?: string;
+  kind?: "normal" | "test" | "followup";
+  scheduledAt?: string;
+  excludeListSlugs?: string[];
   subject: string;
   from: string;
   replyTo?: string;
@@ -26,40 +31,40 @@ type SendSummary = {
   statusBreakdown?: StatusBreakdown;
 };
 
-type StatusBreakdown = { delivered: number; sent: number; bounced: number; failed: number; pending: number };
+type StatusBreakdown = { delivered: number; sent: number; bounced: number; failed: number; pending: number; skipped?: number };
 
-/** A single recipient's stage (mutually exclusive). Used for sorting within detail modal groups. */
-type Stage = "failed" | "bounced" | "pending" | "sent" | "delivered";
+/** 수신자 1명의 단계(상호 배타). 상세 모달 그룹 내 정렬용. */
+type Stage = "failed" | "bounced" | "skipped" | "pending" | "sent" | "delivered";
 function stageOf(r: { status: string; liveStatus?: string }): Stage {
   if (r.status === "failed") return "failed";
+  if (r.status === "skipped") return "skipped";
   if (r.status === "pending") return "pending";
   const ls = (r.liveStatus ?? "").toLowerCase();
   if (ls === "bounced" || ls === "complained") return "bounced";
   if (ls === "delivered" || ls === "opened" || ls === "clicked") return "delivered";
   return "sent";
 }
-// Stage sort order: problems (failed/bounced) → in progress (pending/sent) → done (delivered). Issues surface at the top when tracking.
-const STAGE_ORDER: Record<Stage, number> = { failed: 0, bounced: 1, pending: 2, sent: 3, delivered: 4 };
+// 단계 정렬 순서: 문제(실패·반송) → 진행중(대기·전송) → 완료(전달). 트래킹 시 이슈가 위로.
+const STAGE_ORDER: Record<Stage, number> = { failed: 0, bounced: 1, skipped: 2, pending: 3, sent: 4, delivered: 5 };
 
-/** Single source for per-stage label/color — shared by card dots, progress bar, group header chips, and subheadings. */
+/** 단계별 라벨·색 단일 소스 — 카드 점·진행바·그룹 헤더 칩·소제목이 모두 공유한다. */
 const STAGE_META: Record<Stage, { label: string; bar: string; dot: string }> = {
   delivered: { label: "전달", bar: "bg-green-500", dot: "bg-green-500" },
   sent: { label: "전송중", bar: "bg-yellow-500", dot: "bg-yellow-500" },
   bounced: { label: "반송", bar: "bg-red-600", dot: "bg-red-600" },
   failed: { label: "실패", bar: "bg-gray-500", dot: "bg-gray-500" },
+  skipped: { label: "미발송", bar: "bg-amber-400", dot: "bg-amber-400" },
   pending: { label: "대기", bar: "bg-gray-300", dot: "bg-gray-400" },
 };
-/** Display order (shared by dots/chips/bar segments): done → in progress → problems. */
-const STAGE_VIEW: Stage[] = ["delivered", "sent", "bounced", "failed", "pending"];
+/** 표시 순서(점·칩·바 세그먼트 공통): 완료 → 진행 → 문제. */
+const STAGE_VIEW: Stage[] = ["delivered", "sent", "bounced", "failed", "skipped", "pending"];
 
-/** Aggregate a recipient array by stage (per stageOf — includes complained, all views use the same definition). */
+/** 수신자 배열을 단계별로 집계(stageOf 기준 — complained 포함, 모든 화면이 동일 정의 사용). */
 function stageCounts(rs: { status: string; liveStatus?: string }[]): Record<Stage, number> {
-  const c: Record<Stage, number> = { delivered: 0, sent: 0, bounced: 0, failed: 0, pending: 0 };
+  const c: Record<Stage, number> = { delivered: 0, sent: 0, bounced: 0, failed: 0, skipped: 0, pending: 0 };
   for (const r of rs) c[stageOf(r)]++;
   return c;
 }
-
-type ListSummary = { slug: string; name: string };
 
 type SendDetail = SendSummary & {
   recipients: {
@@ -67,16 +72,18 @@ type SendDetail = SendSummary & {
     name?: string;
     listSlug?: string | null;
     resendId?: string;
-    status: "pending" | "sent" | "failed";
+    status: "pending" | "sent" | "failed" | "skipped";
     error?: string;
     liveStatus?: string;
     liveStatusAt?: string;
   }[];
 };
 
-/** Resend prefill payload — passes recipients (with names) + the original's ad flag/sender/reply-to to keep compliance and consistency. */
+/** 재발송 prefill 페이로드 — 수신자(이름 포함) + 원본의 광고성/발신자/회신을 함께 넘겨 컴플라이언스·일관성 유지. */
 export type FollowupPayload = {
   recipients: { email: string; name?: string }[];
+  /** The send this follow-up comes from (recorded on the new send). */
+  sourceSendId?: string;
   templateName: string;
   isAd?: boolean;
   from?: string;
@@ -90,6 +97,7 @@ const STATUS_META: Record<string, { color: string; label: string; dot: string }>
   clicked: { color: "text-purple-600", label: "클릭 · Clicked", dot: "bg-purple-500" },
   bounced: { color: "text-red-600", label: "반송 · Bounced", dot: "bg-red-600" },
   failed: { color: "text-gray-500", label: "실패 · Failed", dot: "bg-gray-500" },
+  skipped: { color: "text-amber-600", label: "미발송 · Skipped", dot: "bg-amber-400" },
   complained: { color: "text-orange-600", label: "스팸신고 · Complained", dot: "bg-orange-500" },
   delivery_delayed: { color: "text-gray-500", label: "지연 · Delayed", dot: "bg-gray-400" },
   queued: { color: "text-gray-500", label: "대기 · Queued", dot: "bg-gray-500" },
@@ -99,7 +107,7 @@ const STATUS_META: Record<string, { color: string; label: string; dot: string }>
 
 const REFRESH_MS = 15_000;
 
-/** Render stage counts as STAGE_META colored/labeled chips (shared by card and group header). */
+/** 단계 카운트를 STAGE_META 색·라벨 칩으로 렌더 (카드·그룹 헤더 공용). */
 function StageChips({ counts, dot = false }: { counts: Record<Stage, number>; dot?: boolean }) {
   return (
     <>
@@ -128,7 +136,7 @@ export default function TrackingSidebar({
 }: {
   reloadKey: number;
   active?: boolean;
-  /** Follow-up (resend): prefill the send screen with recipients (names) + the original settings. */
+  /** 팔로업(재발송): 수신자(이름)+원본 설정을 발송 화면으로 prefill. */
   onFollowup?: (payload: FollowupPayload) => void;
 }) {
   const [sends, setSends] = useState<SendSummary[]>([]);
@@ -163,7 +171,7 @@ export default function TrackingSidebar({
   }, [filterList]);
 
   useEffect(() => {
-    // Stop polling when the sidebar is closed — avoids Resend API calls and disk readdir overhead.
+    // 사이드바가 닫혀 있을 때는 폴링 정지 — Resend API 호출과 디스크 readdir 부담 제거.
     if (!active) return;
     fetchData();
     const t = setInterval(fetchData, REFRESH_MS);
@@ -244,8 +252,9 @@ function SendCard({
   onClickCard: () => void;
 }) {
   const { total, sent, failed } = send.summary;
-  // Both the card's bar and dots come from the stage classification (statusBreakdown) — same color, same meaning.
-  const bd: Record<Stage, number> = send.statusBreakdown ?? { delivered: 0, sent, bounced: 0, failed, pending: total - sent - failed };
+  // 카드의 바·점 모두 단계 분류(statusBreakdown)에서 나온다 — 같은 색·같은 의미.
+  const raw = send.statusBreakdown ?? { delivered: 0, sent, bounced: 0, failed, pending: total - sent - failed };
+  const bd: Record<Stage, number> = { skipped: 0, ...raw } as Record<Stage, number>;
   const pct = (n: number) => (total > 0 ? (n / total) * 100 : 0);
 
   return (
@@ -256,7 +265,10 @@ function SendCard({
           send.status === "aborted" ? "bg-orange-500" : "bg-green-500"
         }`} />
         <div className="text-[12px] text-text/90 truncate flex-1">{send.subject}</div>
-        <div className="text-[10px] text-muted shrink-0">{timeAgo(send.createdAt)}</div>
+        {send.scheduledAt && <span className="chip shrink-0 text-brand border-brand/40">예약</span>}
+        {send.kind === "followup" && <span className="chip shrink-0">재발송</span>}
+        {send.kind === "test" && <span className="chip shrink-0 text-muted">테스트</span>}
+        <div className="text-[10px] text-muted shrink-0">{timeAgo(send.scheduledAt ?? send.createdAt)}</div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
@@ -270,7 +282,7 @@ function SendCard({
           </button>
         ))}
         {send.adhocCount > 0 && <span className="chip text-muted">ad-hoc {send.adhocCount}</span>}
-        <span className="text-[10px] text-muted ml-auto font-mono truncate max-w-[120px]">{send.templateName}</span>
+        <span className="text-[11px] text-muted ml-auto truncate max-w-[180px]" title={send.templateName}>{send.templateTitle ?? send.templateName}</span>
       </div>
 
       <div className="mt-2 flex h-1.5 w-full rounded-full overflow-hidden bg-surface2">
@@ -318,12 +330,12 @@ function SendDetailModal({
     }
   }, [sendId]);
 
-  // On open, load base data → immediately auto-fetch Resend live status (manual button removed).
+  // 열자마자 기본 데이터 → 곧바로 Resend 라이브 상태 자동 조회 (수동 버튼 제거).
   useEffect(() => { load(false).then(() => load(true, true)); }, [load]);
 
-  // Auto-refresh live status every 15s — only query Resend when there are recipients
-  // not yet confirmed delivered (sent/pending); skip unnecessary calls once all are final. Refreshes quietly without a spinner.
-  // Cap the number of auto-fetches (~10 min) so leaving the modal open doesn't poll forever.
+  // 15초마다 라이브 상태 자동 갱신 — 아직 전달 확인 전(sent/pending) 수신자가 있을 때만
+  // Resend 를 조회한다(전부 확정되면 불필요한 호출 안 함). 스피너 없이 조용히 갱신.
+  // 모달을 오래 열어둬도 무한 폴링하지 않도록 자동 조회 횟수를 상한(약 10분)으로 막는다.
   const detailRef = useRef(detail);
   detailRef.current = detail;
   const autoPollsRef = useRef(0);
@@ -337,7 +349,7 @@ function SendDetailModal({
     return () => clearInterval(t);
   }, [load]);
 
-  // Close on ESC
+  // ESC 로 닫기
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
@@ -345,21 +357,30 @@ function SendDetailModal({
   }, [onClose]);
 
   const failedRecipients = detail ? detail.recipients.filter((r) => r.status === "failed").map((r) => ({ email: r.email, name: r.name })) : [];
-  // Reminder targets = recipients without a confirmed Delivered status. Since opened/clicked tracking is unreliable,
-  // judge by delivery rather than opens. Bounced/complained are excluded anyway (auto-excluded at send time).
+  // 리마인더 대상 = 전달(Delivered) 확인이 안 된 수신자. opened/clicked 추적이 불안정해
+  // 열람 기준 대신 전달 기준으로 판정한다. 반송/신고는 어차피 발송 시 자동 제외라 빼둔다.
   const remindRecipients = detail
     ? detail.recipients.filter((r) => r.status === "sent" && !["delivered", "opened", "clicked", "bounced", "complained"].includes((r.liveStatus ?? "").toLowerCase())).map((r) => ({ email: r.email, name: r.name }))
     : [];
+  // 이어 보내기 = 시작조차 못 한 사람: 중단·서버 재시작으로 남은 '대기', 발송 한도로 빠진 '미발송'.
+  // (수신거부·예약 취소·직접 뺀 사람은 의도된 미발송이라 제외)
+  const unsentRecipients = detail
+    ? detail.recipients.filter((r) => (r.status === "pending" && detail.status !== "running") || (r.status === "skipped" && isUnreachedSkip(r.error))).map((r) => ({ email: r.email, name: r.name }))
+    : [];
   const failedEmails = failedRecipients.map((r) => r.email);
   const allEmails = detail ? detail.recipients.map((r) => r.email) : [];
-  // Whether live status has been refreshed at least once — if not, "non-openers" is effectively everyone, so block reminders.
-  const hasLiveStatus = detail ? detail.recipients.some((r) => r.liveStatusAt) : false;
+  // 리마인더는 배달이 어느 정도 끝난 뒤에만 의미가 있다: 발송이 끝나고 30분이 지났고,
+  // 실제로 '전달' 이상이 확인된 사람이 한 명이라도 있어야 켠다 (발송 직후엔 전원이 '전송중'이라 중복 발송 위험).
+  const REMIND_DELAY_MS = 30 * 60 * 1000;
+  const finishedAgo = detail?.finishedAt ? Date.now() - new Date(detail.finishedAt).getTime() : 0;
+  const hasLiveStatus = !!detail && finishedAgo >= REMIND_DELAY_MS &&
+    detail.recipients.some((r) => ["delivered", "opened", "clicked"].includes((r.liveStatus ?? "").toLowerCase()));
 
   function buildFollowup(recipients: { email: string; name?: string }[]): FollowupPayload {
-    return { recipients, templateName: detail!.templateName, isAd: detail!.isAd, from: detail!.from, replyTo: detail!.replyTo };
+    return { recipients, sourceSendId: detail!.id, templateName: detail!.templateName, isAd: detail!.isAd, from: detail!.from, replyTo: detail!.replyTo };
   }
 
-  // Group recipients by list (slug). ad-hoc (no listSlug) forms one group. Preserves send order.
+  // 수신자를 리스트(슬러그)별로 묶는다. ad-hoc(listSlug 없음)은 한 그룹으로. 발송 시 순서 보존.
   const groups = useMemo(() => {
     const m = new Map<string, SendDetail["recipients"]>();
     for (const r of detail?.recipients ?? []) {
@@ -374,8 +395,8 @@ function SendDetailModal({
   const allOpen = groupKeys.length > 0 && groupKeys.every((k) => expanded.has(k));
   function toggleAll() { setExpanded(allOpen ? new Set() : new Set(groupKeys)); }
 
-  // On first load: auto-expand if there's a single group or few recipients (<=30) so the modal doesn't look empty.
-  // After that, preserve the user's collapse/expand state (auto-refresh won't override it).
+  // 첫 로드 시: 그룹이 1개거나 수신자가 적으면(<=30명) 자동으로 펼친다(모달이 비어 보이지 않게).
+  // 이후 사용자가 접고 펼친 상태는 보존(자동 갱신이 덮지 않음).
   const didInitExpand = useRef(false);
   useEffect(() => {
     if (!detail || didInitExpand.current || groupKeys.length === 0) return;
@@ -384,11 +405,10 @@ function SendDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail]);
 
-  const sentBase = metrics ? metrics.sent + metrics.failed : 0;
   const openRate = metrics && metrics.sent > 0 ? Math.round((metrics.opened / metrics.sent) * 100) : null;
   const clickRate = metrics && metrics.sent > 0 ? Math.round((metrics.clicked / metrics.sent) * 100) : null;
 
-  async function copy(list: string[], label: string) {
+  async function copy(list: string[]) {
     if (list.length === 0) return;
     await navigator.clipboard?.writeText(list.join("\n"));
   }
@@ -419,7 +439,8 @@ function SendDetailModal({
             <dl className="text-[12px] space-y-1.5">
               <DRow label="발송일시">{new Date(detail.createdAt).toLocaleString("ko-KR")}</DRow>
               <DRow label="발송자">{detail.sentBy}</DRow>
-              <DRow label="이메일"><span className="font-mono">{detail.templateName}</span></DRow>
+              <DRow label="이메일">{detail.templateTitle ?? detail.templateName}</DRow>
+              {detail.scheduledAt && <DRow label="예약 시각">{new Date(detail.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} KST</DRow>}
               <DRow label="From"><span className="font-mono">{detail.from}</span></DRow>
               <DRow label="리스트">
                 {detail.listSlugs.length > 0 ? detail.listSlugs.map((s) => lists[s] ?? s).join(", ") : "ad-hoc only"}
@@ -434,7 +455,7 @@ function SendDetailModal({
               </DRow>
             </dl>
 
-            {/* Performance metrics */}
+            {/* 성과 지표 */}
             {metrics && (
               <div className="grid grid-cols-4 gap-2">
                 <Metric label="발송" value={metrics.sent} />
@@ -451,9 +472,9 @@ function SendDetailModal({
               </div>
             )}
 
-            {/* Follow-up actions */}
+            {/* 팔로업 액션 */}
             <div className="rounded-lg border border-border p-3 bg-surface2/20 space-y-2">
-              <div className="text-[11px] text-muted">팔로업 / 재발송 · 대상 이메일을 발송 화면에 채웁니다</div>
+              <div className="text-[11px] text-muted">재발송 · 대상만 발송 화면에 반영</div>
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={() => { if (failedRecipients.length && onFollowup) { onFollowup(buildFollowup(failedRecipients)); onClose(); } }}
@@ -465,17 +486,24 @@ function SendDetailModal({
                   onClick={() => { if (remindRecipients.length && hasLiveStatus && onFollowup) { onFollowup(buildFollowup(remindRecipients)); onClose(); } }}
                   disabled={remindRecipients.length === 0 || !hasLiveStatus}
                   className="btn-ghost text-xs disabled:opacity-40"
-                  title={hasLiveStatus ? "전달(Delivered) 확인이 안 된 수신자에게 다시 발송" : "전달 상태 조회 중 — 잠시 후 활성화됩니다"}
+                  title={hasLiveStatus ? "전달 미확인 수신자 재발송" : "발송 완료 30분 후 · 전달 확인 이후 활성"}
                 >🔔 리마인더 · 미전달 {hasLiveStatus && remindRecipients.length > 0 ? `(${remindRecipients.length})` : ""}</button>
-                <button onClick={() => copy(failedEmails, "failed")} disabled={failedEmails.length === 0} className="text-[11px] text-muted hover:text-text disabled:opacity-40">📋 실패 복사</button>
-                <button onClick={() => copy(allEmails, "all")} className="text-[11px] text-muted hover:text-text">📋 전체 복사</button>
+                {unsentRecipients.length > 0 && (
+                  <button
+                    onClick={() => { if (onFollowup) { onFollowup(buildFollowup(unsentRecipients)); onClose(); } }}
+                    className="btn-ghost text-xs"
+                    title="중단·서버 재시작·발송 한도로 미발송된 수신자"
+                  >▶ 미발송자 다시 보내기 ({unsentRecipients.length})</button>
+                )}
+                <button onClick={() => copy(failedEmails)} disabled={failedEmails.length === 0} className="text-[11px] text-muted hover:text-text disabled:opacity-40">📋 실패 복사</button>
+                <button onClick={() => copy(allEmails)} className="text-[11px] text-muted hover:text-text">📋 전체 복사</button>
               </div>
               {!hasLiveStatus && (
-                <p className="text-[10px] text-amber-600">※ 전달 상태를 조회하는 중입니다 — 잠시 후 리마인더가 활성화됩니다.</p>
+                <p className="text-[12px] text-muted">리마인더: 발송 완료 30분 후 · 전달 확인 이후 활성</p>
               )}
             </div>
 
-            {/* Recipients — grouped by list (collapsible), classified by stage within each group */}
+            {/* 수신자 — 리스트별 그룹(접기/펼치기), 그룹 안은 단계별 분류 */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-[11px] text-muted">수신자 ({detail.recipients.length}명) · 리스트별</div>
@@ -515,7 +543,7 @@ function SendDetailModal({
   );
 }
 
-/** Render recipients within a single list group, sorted by stage and split under stage subheadings. */
+/** 한 리스트 그룹 안의 수신자를 단계별로 정렬 + 단계 소제목으로 분류해 렌더. */
 function GroupRows({ rs }: { rs: SendDetail["recipients"] }) {
   const sorted = [...rs].sort((a, b) => STAGE_ORDER[stageOf(a)] - STAGE_ORDER[stageOf(b)]);
   const counts: Partial<Record<Stage, number>> = {};
@@ -540,7 +568,7 @@ function GroupRows({ rs }: { rs: SendDetail["recipients"] }) {
       <tr key={r.email} className="border-t border-border align-top" title={r.error ?? ""}>
         <td className="px-3 py-1.5 font-mono text-text/90">
           <div className="truncate">{r.email}{r.name && <span className="text-muted font-sans ml-1.5">{r.name}</span>}</div>
-          {r.status === "failed" && r.error && (
+          {(r.status === "failed" || r.status === "skipped") && r.error && (
             <div className="text-[10px] text-red-500 font-sans mt-0.5 break-words whitespace-normal">⚠ {r.error}</div>
           )}
         </td>
@@ -584,7 +612,7 @@ function RefreshIcon({ spinning }: { spinning: boolean }) {
   );
 }
 
-/** Fixed single line — instead of wrapping, shrink font down to 9px when it overflows, then ellipsis if still too long. */
+/** 한 줄 고정 — 넘치면 줄바꿈 대신 글자 크기를 9px 까지 줄이고, 그래도 넘치면 말줄임. */
 function FitText({ children }: { children: React.ReactNode }) {
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {

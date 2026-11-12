@@ -2,22 +2,21 @@
 
 import { useEffect, useMemo, useState } from "react";
 import RecipientInput from "./RecipientInput";
-import { type Recipient } from "@/lib/recipients";
+import { mergeMembers as mergeWithFill, type Recipient } from "@/lib/recipients";
+import { formatKst } from "@/lib/kst";
 
 /** Merge extra into base, deduped by email (base wins, first name preserved). */
 function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
-  const seen = new Set(base.map((m) => m.email.toLowerCase()));
-  const out = [...base];
-  for (const r of extra) {
-    const e = r.email.toLowerCase();
-    if (!seen.has(e)) { seen.add(e); out.push({ email: e, name: r.name }); }
-  }
-  return out;
+  return mergeWithFill(base, extra).members;
 }
 
+type ScheduleUse = { id: string; scheduledAt: string; templateTitle?: string; templateName: string; canManage: boolean };
+
 /**
- * List create/edit modal, opened from the send screen's list picker (both "새 리스트" and per-row edit).
- * Member input is unified through RecipientInput (grid paste + CSV).
+ * 리스트 생성/편집 모달.
+ * 권한: 만든 사람·관리자는 전부 수정, 그 외 사람은 멤버 '추가'만 (기존 멤버는 읽기 전용).
+ * 이 리스트를 쓰는 예약 발송이 있으면 저장 전에 취소/유지/예약도 갱신 중 하나를 고르게 한다. ListSelectDialog(행별 수정)와 SendForm(리스트 만들기) 양쪽에서 재사용.
+ * 멤버 입력은 RecipientInput(그리드 붙여넣기 + CSV) 으로 통일.
  */
 export default function ListEditor({
   slug,
@@ -46,6 +45,8 @@ export default function ListEditor({
   // inline member name editing
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
+  const [originalEmails, setOriginalEmails] = useState<Set<string>>(new Set());
+  const [scheduleAsk, setScheduleAsk] = useState<ScheduleUse[] | null>(null);
 
   useEffect(() => {
     if (!slug) { setLoaded(true); return; }
@@ -57,6 +58,7 @@ export default function ListEditor({
           setName(j.list.name);
           setDescription(j.list.description ?? "");
           setMembers(j.list.members ?? []);
+          setOriginalEmails(new Set((j.list.members ?? []).map((m: Recipient) => m.email.toLowerCase())));
           setCreatedBy(j.list.createdBy ?? "");
         }
       })
@@ -66,7 +68,9 @@ export default function ListEditor({
   // anyone can create new; editing/deleting an existing list is creator or admin only (matches server canManage).
   const canManageList = !slug || (!!me && (me.toLowerCase() === createdBy.toLowerCase() || isAdmin));
   const canDelete = !!slug && canManageList;
-  const readOnly = !!slug && !canManageList;
+  /** Not the owner: may only append members. */
+  const addOnly = !!slug && !canManageList;
+  const isOriginal = (email: string) => originalEmails.has(email.toLowerCase());
 
   function addMembers(rows: Recipient[]) {
     setMembers((cur) => mergeMembers(cur, rows));
@@ -77,6 +81,10 @@ export default function ListEditor({
   const finalMembers = useMemo(() => mergeMembers(members, pendingRows), [members, pendingRows]);
   const pendingExtra = finalMembers.length - members.length;
 
+  // 회사/직함 열은 CSV 임포트로 값이 있는 멤버가 하나라도 있을 때만 표시(대부분은 없는 필드라 기본은 숨김).
+  const hasCompanyCol = useMemo(() => members.some((m) => m.company?.trim()), [members]);
+  const hasTitleCol = useMemo(() => members.some((m) => m.title?.trim()), [members]);
+
   function removeMember(email: string) {
     setMembers((cur) => cur.filter((m) => m.email !== email));
   }
@@ -85,16 +93,39 @@ export default function ListEditor({
     if (editingEmail === null) return;
     const email = editingEmail;
     const name = editingName.trim();
-    setMembers((cur) => cur.map((m) => (m.email === email ? { email: m.email, name: name || undefined } : m)));
+    setMembers((cur) => cur.map((m) => (m.email === email ? { ...m, name: name || undefined } : m)));
     setEditingEmail(null);
     setEditingName("");
   }
 
-  async function save() {
+  /** Save button: if pending schedules use this list, ask first. */
+  async function requestSave() {
+    setErr("");
+    if (slug) {
+      const j = await fetch(`/api/schedules?list=${encodeURIComponent(slug)}`).then((r) => r.json()).catch(() => null);
+      // Only schedules this user can actually update — asking about others' would offer a choice that changes nothing.
+      const uses: ScheduleUse[] = (j?.schedules ?? []).filter((s: ScheduleUse) => s.canManage);
+      if (uses.length > 0) { setScheduleAsk(uses); return; }
+    }
+    await save(false);
+  }
+
+  async function save(updateSchedules: boolean) {
     setErr(""); setSaving(true);
     try {
       let created: { slug: string } | undefined;
-      if (slug) {
+      if (slug && addOnly) {
+        const newRows = finalMembers.filter((m) => !isOriginal(m.email));
+        if (newRows.length > 0) {
+          const r = await fetch(`/api/lists/${encodeURIComponent(slug)}/members`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ members: newRows }),
+          });
+          const j = await r.json();
+          if (!r.ok) throw new Error(j.error ?? "추가 실패");
+        }
+      } else if (slug) {
         const r = await fetch(`/api/lists/${encodeURIComponent(slug)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -113,6 +144,19 @@ export default function ListEditor({
         if (!r.ok) throw new Error(j.error ?? "생성 실패");
         if (j.list?.slug) created = { slug: j.list.slug };
       }
+      if (slug && updateSchedules && scheduleAsk) {
+        const errors: string[] = [];
+        for (const s of scheduleAsk) {
+          const r = await fetch(`/api/sends/${encodeURIComponent(s.id)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refreshList: slug }),
+          });
+          if (!r.ok) errors.push((await r.json().catch(() => ({}))).error ?? "예약 갱신 실패");
+        }
+        if (errors.length) { setScheduleAsk(null); throw new Error(`리스트 저장 완료 · 예약 업데이트 실패: ${errors.join(", ")}`); }
+      }
+      setScheduleAsk(null);
       onSaved(created);
       onClose();
     } catch (e: any) {
@@ -154,28 +198,28 @@ export default function ListEditor({
         ) : (
           <>
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {readOnly && (
+              {addOnly && (
                 <div className="text-[12px] text-amber-700 bg-amber-400/10 border border-amber-400/30 rounded-lg px-3 py-2">
-                  읽기 전용 — 이 리스트는 생성자({createdBy}) 또는 관리자만 수정할 수 있습니다.
+                  멤버 추가만 가능 · 수정·삭제는 만든 사람({createdBy})·관리자
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] text-muted mb-1">이름 <span className="text-brand">*</span></label>
-                  <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Hensen VC 명단" disabled={readOnly} />
+                  <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Hensen VC 명단" disabled={addOnly} />
                 </div>
                 <div>
                   <label className="block text-[11px] text-muted mb-1">설명</label>
-                  <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="2026 Series A 컨택" disabled={readOnly} />
+                  <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="2026 Series A 컨택" disabled={addOnly} />
                 </div>
               </div>
 
-              {!readOnly && (
+              {(
               <div>
                 <RecipientInput label="멤버 추가" onAdd={addMembers} onChange={setPendingRows} />
                 {pendingExtra > 0 && (
                   <div className="mt-1.5 text-[11px] text-brand">
-                    붙여넣은 {pendingExtra}명이 저장 시 자동 포함됩니다. (‘추가’를 누르면 아래 목록에 미리 반영)
+                    입력 중인 {pendingExtra}명도 저장 시 자동 포함됩니다 (칸 밖을 클릭하면 즉시 아래 목록에 반영).
                   </div>
                 )}
               </div>
@@ -190,8 +234,10 @@ export default function ListEditor({
                         {members.map((m) => {
                           const nameless = !m.name?.trim();
                           const editing = editingEmail === m.email;
+                          // Non-owners can only touch rows they are adding right now.
+                          const readOnly = addOnly && isOriginal(m.email);
                           return (
-                          <tr key={m.email} className={`border-b border-border last:border-b-0 ${nameless && !readOnly ? "bg-amber-500/[0.06]" : ""}`}>
+                          <tr key={m.email} className={`border-b border-border last:border-b-0 ${addOnly && !readOnly ? "bg-brand/[0.06]" : nameless && !readOnly ? "bg-amber-500/[0.06]" : ""}`}>
                             <td className="px-3 py-1.5 text-text/90 font-mono">{m.email}</td>
                             <td className="px-3 py-1.5 text-muted">
                               {readOnly ? (m.name ?? "") : editing ? (
@@ -217,6 +263,8 @@ export default function ListEditor({
                                 </button>
                               )}
                             </td>
+                            {hasCompanyCol && <td className="px-3 py-1.5 text-muted">{m.company ?? ""}</td>}
+                            {hasTitleCol && <td className="px-3 py-1.5 text-muted">{m.title ?? ""}</td>}
                             <td className="px-2 py-1.5 text-right">
                               {!readOnly && <button onClick={() => removeMember(m.email)} className="text-muted hover:text-red-500 text-[11px]">✕</button>}
                             </td>
@@ -259,17 +307,38 @@ export default function ListEditor({
                 )}
               </div>
               <div className="flex gap-2">
-                <button onClick={onClose} className="btn-ghost text-sm">{readOnly ? "닫기" : "취소"}</button>
-                {!readOnly && (
-                  <button onClick={save} disabled={saving} className="btn-primary text-sm">
-                    {saving ? "저장 중…" : slug ? `저장 (${finalMembers.length}명)` : `리스트 생성 (${finalMembers.length}명)`}
-                  </button>
-                )}
+                <button onClick={onClose} className="btn-ghost text-sm">취소</button>
+                <button onClick={requestSave} disabled={saving || (addOnly && finalMembers.length === originalEmails.size)} className="btn-primary text-sm">
+                  {saving ? "저장 중…"
+                    : addOnly ? `${finalMembers.length - originalEmails.size}명 추가`
+                    : slug ? `저장 (${finalMembers.length}명)` : `리스트 생성 (${finalMembers.length}명)`}
+                </button>
               </div>
             </div>
           </>
         )}
       </div>
+      {scheduleAsk && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setScheduleAsk(null); }}>
+          <div className="card w-full max-w-md p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-semibold">리스트를 사용하는 예약 {scheduleAsk.length}건</h3>
+            <ul className="text-[13px] space-y-1 max-h-40 overflow-y-auto">
+              {scheduleAsk.map((s) => (
+                <li key={s.id} className="flex justify-between gap-3">
+                  <span className="truncate">{s.templateTitle ?? s.templateName}</span>
+                  <span className="text-muted shrink-0 tabular-nums">{formatKst(s.scheduledAt)} KST</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[13px] text-text/80">예약된 발송의 수신자도 함께 업데이트하시겠습니까?</p>
+            <div className="flex justify-end gap-2 pt-1">
+              <button className="btn-ghost text-sm" onClick={() => setScheduleAsk(null)} title="저장 없이 편집으로 복귀">취소</button>
+              <button className="btn-ghost text-sm" disabled={saving} onClick={() => save(false)} title="리스트만 저장 · 예약은 기존 명단">리스트만 수정</button>
+              <button className="btn-primary text-sm" disabled={saving} onClick={() => save(true)} title="리스트 저장 + 예약 명단 업데이트">확인</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

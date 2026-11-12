@@ -104,3 +104,57 @@
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+
+/* studio rich text */
+.rtField:empty::before { content: attr(data-ph); color: #9ca3af; pointer-events: none; }
+.rtField { outline: none; min-height: 1.4em; }
+
+/* ── 인앱 사용 가이드 본문 (lib/guide-content.ts 의 생성 HTML) ──
+ * .ui   = 화면의 버튼·메뉴 이름 (키캡 칩)   ← 문서의 **굵게**
+ * mark  = 꼭 읽어야 하는 문장 (하이라이트)   ← 문서의 ==표시==
+ * h4    = ① ② 소소제목                       ← 굵은 글씨만 있는 문단
+ * .step = 번호 단계                           ← **N.** 으로 시작하는 문단
+ */
+.guide { @apply text-[14px] leading-[1.8] text-text/85; }
+.guide h3 { @apply relative text-[16px] font-bold text-text mt-10 mb-3 pb-2; }
+.guide h3::after { @apply absolute left-0 bottom-0 h-0.5 w-6 rounded-full bg-brand; content: ""; }
+.guide h4 { @apply text-[14.5px] font-semibold text-text mt-7 mb-2; }
+.guide p { @apply my-3; }
+.guide .ui {
+  @apply inline-block rounded-md border border-border bg-surface2 px-1.5 py-px mx-px align-[1px]
+         text-[12.5px] font-semibold leading-snug text-text whitespace-nowrap;
+  box-shadow: 0 1px 0 rgb(var(--border));
+}
+.guide mark { @apply rounded bg-amber-300/40 px-1 py-0.5 text-text font-medium; }
+.guide .step { @apply flex items-start gap-2.5 my-3.5; }
+.guide .step .n {
+  @apply mt-[3px] w-5 h-5 shrink-0 rounded-full bg-brand text-onBrand text-[11px] font-bold
+         inline-flex items-center justify-center;
+}
+.guide a { @apply text-brand underline underline-offset-2 break-all; }
+.guide ul { @apply my-3 pl-1 space-y-1.5; }
+.guide li { @apply relative pl-4; }
+.guide li::before { @apply absolute left-0 top-[0.7em] w-1 h-1 rounded-full bg-brand/60; content: ""; }
+.guide code { @apply rounded bg-surface2 border border-border px-1 py-0.5 font-mono text-[12px] text-text/90; }
+.guide pre { @apply my-4 rounded-lg border border-border bg-surface2 p-3.5 overflow-x-auto; }
+.guide pre code { @apply border-0 bg-transparent p-0 text-[12px] leading-relaxed; }
+.guide blockquote {
+  @apply relative my-5 rounded-lg border border-amber-400/50 bg-amber-400/10 py-3 pl-10 pr-4 text-text;
+}
+.guide blockquote::before { @apply absolute left-3.5 top-2.5 text-[15px]; content: "⚠️"; }
+.guide blockquote .ui { @apply border-0 bg-transparent px-0 shadow-none font-bold; }
+.guide .tableWrap { @apply my-4 overflow-x-auto rounded-lg border border-border; }
+.guide table { @apply w-full border-collapse text-[13px]; }
+.guide th { @apply bg-surface2 px-3 py-2 text-left font-semibold text-text whitespace-nowrap; }
+.guide td { @apply border-t border-border px-3 py-2 align-top; }
+.guide figure { @apply my-5; }
+.guide figure a { @apply block cursor-zoom-in rounded-lg border border-border overflow-hidden transition hover:border-brand/60 hover:shadow-md; }
+.guide figure img { @apply w-full transition-transform duration-200; }
+.guide figure a:hover img { transform: scale(1.01); }
+.guide figure::after { @apply block mt-1.5 text-right text-[11px] text-muted; content: "클릭하면 원본 크기로 열립니다"; }
+
+/* Studio: indeterminate progress bar above the preview while the AI works. */
+@keyframes ebslide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}

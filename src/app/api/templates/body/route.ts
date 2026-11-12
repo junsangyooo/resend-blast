@@ -17,5 +17,7 @@ export async function GET(req: NextRequest) {
     subject: meta?.subject ?? "",
     description: meta?.description ?? "",
     composed: meta?.composed ?? false,
+    title: meta?.title ?? name,
+    lastModifiedAt: meta?.lastModifiedAt ?? null,
   });
 }

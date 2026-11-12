@@ -4,17 +4,19 @@ import RecipientInput from "./RecipientInput";
 import { useEscClose } from "./hooks";
 
 /**
- * Ad-hoc recipient popup — moves the free-text/CSV input (RecipientInput) into a popup
- * so step 2 of the send screen stays compact. Text is the single source: the parent
- * (SendForm) holds it and does the parsing too.
+ * 직접 입력(ad-hoc) 팝업 — 발송 화면 2단계를 컴팩트하게 유지하기 위해
+ * 자유텍스트/CSV 입력(RecipientInput)을 팝업으로 분리.
+ * 텍스트가 단일 소스: 부모(SendForm)가 보관하고 파싱도 부모가 수행한다.
  */
 export default function AdhocDialog({
-  open, value, count, onTextChange, onClose,
+  open, value, count, onTextChange, onSaveAsList, onClose,
 }: {
   open: boolean;
   value: string;
   count: number;
   onTextChange: (text: string) => void;
+  /** Save the parsed recipients as a reusable list. */
+  onSaveAsList?: () => void;
   onClose: () => void;
 }) {
   useEscClose(open, onClose);
@@ -40,12 +42,17 @@ export default function AdhocDialog({
         </div>
 
         <div className="px-5 py-3 border-t border-border flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-muted">
+          <span className="text-[12px] text-muted">
             리스트와 합쳐 이메일 기준 중복 제거 후 발송됩니다.
           </span>
-          <button onClick={onClose} className="btn-primary text-sm">
-            완료{count > 0 ? ` (${count}명)` : ""}
-          </button>
+          <span className="flex items-center gap-2 shrink-0">
+            {onSaveAsList && count > 0 && (
+              <button onClick={onSaveAsList} className="btn-ghost text-sm" title="다음에도 쓰도록 리스트로 저장">리스트로 저장</button>
+            )}
+            <button onClick={onClose} className="btn-primary text-sm">
+              완료{count > 0 ? ` (${count}명)` : ""}
+            </button>
+          </span>
         </div>
       </div>
     </div>

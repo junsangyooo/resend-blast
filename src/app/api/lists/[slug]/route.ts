@@ -35,7 +35,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { slug: st
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     const msg = e?.message ?? "삭제 실패";
-    const status = msg.includes("생성자만") ? 403 : 400;
+    const status = msg.includes("권한") ? 403 : 400;
     return NextResponse.json({ error: msg }, { status });
   }
 }

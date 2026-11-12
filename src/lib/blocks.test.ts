@@ -140,6 +140,14 @@ describe("renderTemplate (flat model)", () => {
     expect(off).not.toContain("youtube.com/@example");
     expect(off).not.toContain(UNSUB_PLACEHOLDER);
   });
+
+  it("footer toggles: orgName + inquiry off drops the whole sender line", () => {
+    const off = renderTemplate({ ...base([mk("text", { text: "x" })]), footer: { showOrgName: false, showInquiry: false } });
+    expect(off).not.toContain("문의:");
+    // 저작권 줄의 회사명은 남고, 발신 정보 줄만 사라진다.
+    expect(off).toContain(`&copy; ${new Date().getFullYear()}`);
+    expect(off).not.toMatch(/font-size:11px;[^"]*">\s*RLWRLD/);
+  });
 });
 
 describe("sanitizeInline (partial formatting)", () => {
@@ -157,6 +165,45 @@ describe("sanitizeInline (partial formatting)", () => {
   it("renderTemplate uses sanitized html for text blocks", () => {
     const html = renderTemplate(base([mk("text", { html: '<b>굵게</b> 일반' })]));
     expect(html).toContain("<strong>굵게</strong>");
+  });
+  it("sanitizeInline is idempotent", () => {
+    const x = 'Q&A <strong>b</strong> "q" <u>u</u> 5 < 6';
+    const once = sanitizeInline(x);
+    expect(sanitizeInline(once)).toBe(once);
+  });
+  it("keeps existing entities intact", () => {
+    expect(sanitizeInline("R&amp;D & Q&A")).toBe("R&amp;D &amp; Q&amp;A");
+  });
+  it("link href with query params is idempotent too", () => {
+    const once = sanitizeInline('<a href="https://x.com/?a=1&b=2">링크</a>');
+    expect(sanitizeInline(once)).toBe(once);
+    expect(once).toContain("a=1&amp;b=2");
+  });
+});
+
+describe("sanitizeInline u/s", () => {
+  it("passes underline and strikethrough", () => {
+    expect(sanitizeInline("<u>밑줄</u> <s>취소</s>")).toBe("<u>밑줄</u> <s>취소</s>");
+    expect(sanitizeInline("<strike>x</strike><del>y</del>")).toBe("<s>x</s><s>y</s>");
+  });
+  it("still strips scripts/divs", () => {
+    expect(sanitizeInline('<script>x</script><div>y</div>')).toBe("xy");
+  });
+});
+
+describe("descHtml partial formatting", () => {
+  it("renders sanitized descHtml in numbered items", () => {
+    const html = renderTemplate({ subject: "t", showLogo: false, showFooter: false, blocks: [
+      { id: "a", type: "numbered", items: [{ title: "T", descHtml: "<u>u</u><script>x</script>" }] },
+    ]});
+    expect(html).toContain("<u>u</u>");
+    expect(html).not.toContain("<script>");
+  });
+  it("renders sanitized descHtml in grid cards", () => {
+    const html = renderTemplate({ subject: "t", showLogo: false, showFooter: false, blocks: [
+      { id: "a", type: "grid", cols: 2, cardType: "feature", cards: [{ title: "T", descHtml: "<s>d</s>" }] },
+    ]});
+    expect(html).toContain("<s>d</s>");
   });
 });
 
@@ -218,5 +265,27 @@ describe("personalization placeholders", () => {
   it("usesPersonalization detects tokens", () => {
     expect(usesPersonalization("hi {{name}}")).toBe(true);
     expect(usesPersonalization("plain")).toBe(false);
+  });
+});
+
+import { renderTemplate as _render, migrateSpec as _migrate } from "./blocks";
+import { stripAnnotations, annotateHtml, elementRanges } from "./html-map";
+import fs from "fs";
+import path from "path";
+describe("editor annotations", () => {
+  it("never change the saved/sent HTML", () => {
+    const dir = path.join(process.cwd(), "templates");
+    for (const f of fs.readdirSync(dir).filter((x) => x.endsWith(".json") && x !== "_meta.json")) {
+      const spec = _migrate(JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8")));
+      const plain = _render(spec);
+      const ann = _render(spec, { annotate: true });
+      expect(ann).not.toBe(plain);
+      // the code view (= stripped editor render) is exactly the saved/sent HTML
+      expect(stripAnnotations(ann)).toBe(plain);
+      // preview element indices line up with the code view (editor-only wrappers are not indexed)
+      expect(annotateHtml(ann, { wrapText: false }).map.elements.length).toBe(elementRanges(plain).length);
+      // and the plain render has no editor-only wrappers at all
+      expect(plain).not.toContain("data-eb-");
+    }
   });
 });
