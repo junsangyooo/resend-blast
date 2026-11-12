@@ -57,10 +57,10 @@ type Props = {
 };
 
 /**
- * 발송 화면 — 좌측 3단계는 목록을 팝업으로 위임해 스크롤 없이 한 화면에 들어온다.
- * ① 이메일: 만들기(생성/업로드 팝업) 또는 목록에서 선택(전체 노출·생성자만 삭제)
- * ② 수신자: 리스트 만들기/선택(팝업에서 다중선택·수정·삭제) + 직접 입력(팝업)
- * ③ 발신: 내 계정으로 / 공용 발신자로(팝업 선택) + Reply-To·광고성
+ * Send screen — the 3 steps on the left delegate their lists to popups so everything fits on one screen without scrolling.
+ * ① Email: create (create/upload popup) or pick from the list (all shown; only the creator can delete)
+ * ② Recipients: create/pick lists (multi-select, edit, delete in a popup) + ad-hoc input (popup)
+ * ③ Sender: "내 계정으로" / shared sender (picked in a popup) + Reply-To and promotional flag
  */
 export default function SendForm({ prefill, configReloadKey = 0, onScheduled, onOpenSchedules, onOpenHistory }: Props) {
   const [templates, setTemplates] = useState<PickerTemplate[]>([]);
@@ -80,7 +80,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
   const [myNick, setMyNick] = useState("");
   const [replyTo, setReplyTo] = useState<string>("");
   const [isAd, setIsAd] = useState(false);
-  const [forceNextSend, setForceNextSend] = useState(false); // 재발송 prefill 시 멱등성 우회 1회
+  const [forceNextSend, setForceNextSend] = useState(false); // bypass idempotency once on re-send prefill
   const [followupOf, setFollowupOf] = useState<string | undefined>(undefined);
   const [hydrated, setHydrated] = useState(false);
   /** Selected email's body has an unsubscribe link (null = unknown/loading). */
@@ -99,7 +99,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
   const [notice, setNotice] = useState<string>("");
   const [scheduledNotice, setScheduledNotice] = useState(false);
 
-  // 팝업 상태 — 각 단계의 목록/입력 UI 는 전부 팝업으로 위임
+  // Popup state — each step's list/input UI is delegated to a popup
   const [createOpen, setCreateOpen] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -248,8 +248,8 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
     window.location.href = `/studio?edit=${encodeURIComponent(name)}`;
   }
 
-  // 선택된 리스트들의 멤버 프리뷰 — 선택 순서 유지 (동일 주소는 먼저 선택한 리스트 이름 우선)
-  // + 제외 리스트의 멤버(이번 발송에서 뺄 주소)
+  // Member preview of the selected lists — keeps selection order (a duplicate address keeps the earlier-selected list's name)
+  // + members of the exclusion lists (addresses to drop from this send)
   const membersSeq = useRef(0);
   /** (Re)load members of selected + excluded lists. Also called right before the confirm screen opens,
    *  because anyone may add members to a list while this page sits open. */
@@ -280,7 +280,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
     setConfirmOpen(true);
   }
 
-  // 선택한 이메일 본문에 수신거부 링크가 있는지 (광고성 발송 안내용)
+  // Whether the selected email body has an unsubscribe link (for the promotional-send notice)
   useEffect(() => {
     setHasUnsub(null);
     if (!selected) return;
@@ -294,7 +294,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
 
   const tmplObj = templates.find((t) => t.name === selected);
 
-  // 직접 입력은 텍스트가 단일 소스 — 팝업이 닫혀 있어도(재발송 prefill 등) 항상 파싱 결과가 최신.
+  // For ad-hoc input the text is the single source — the parsed result stays current even when the popup is closed (re-send prefill, etc.).
   const adhocRows = useMemo(() => parseRecipientGrid(adhoc).rows, [adhoc]);
 
   const mergedRecipients = useMemo(() => {
@@ -315,7 +315,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
     return out;
   }, [listMembersPreview, adhocRows, excludedListEmails]);
 
-  // 제외 리스트 때문에 빠지는 인원 (선택·직접 입력에 있던 사람 중)
+  // People dropped by the exclusion lists (among those in the selection or ad-hoc input)
   const excludedCount = useMemo(() => {
     if (excludedListEmails.size === 0) return 0;
     const all = new Set([...listMembersPreview.map((m) => m.email.toLowerCase()), ...adhocRows.map((r) => r.email.toLowerCase())]);
@@ -324,7 +324,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
     return n;
   }, [excludedListEmails, listMembersPreview, adhocRows]);
 
-  // 리스트만의 중복 제거 인원 (리스트 선택 팝업의 합계 요약용)
+  // Deduplicated count from lists only (for the total summary in the list-select popup)
   const listUniqueCount = useMemo(
     () => new Set(listMembersPreview.map((m) => m.email.toLowerCase())).size,
     [listMembersPreview]
@@ -411,7 +411,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
     } finally {
       setSending(false);
       setAborting(false);
-      if (!testToSelf) { setForceNextSend(false); setFollowupOf(undefined); } // 재발송 표시·멱등성 우회는 1회만
+      if (!testToSelf) { setForceNextSend(false); setFollowupOf(undefined); } // re-send marker and idempotency bypass apply once only
     }
   }
 
@@ -469,9 +469,9 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
 
   return (
     <div className="h-full grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] card overflow-hidden">
-      {/* ─────────── LEFT: 3단계 설정 — 스크롤 없이 한 화면 ─────────── */}
+      {/* ─────────── LEFT: 3-step setup — one screen, no scrolling─────────── */}
       <div className="lg:border-r border-border bg-surface p-5 flex flex-col gap-6 overflow-y-auto">
-        {/* ① 이메일 */}
+        {/* ① Email */}
         <section className="space-y-2.5">
           <StepHead n={1} title="이메일 선택" />
           <p className="text-[12px] text-muted truncate">
@@ -801,7 +801,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
         )}
       </div>
 
-      {/* ─────────── 팝업들 ─────────── */}
+      {/* ─────────── Popups ─────────── */}
       <CreateEmailDialog
         open={createOpen}
         onClose={() => setCreateOpen(false)}

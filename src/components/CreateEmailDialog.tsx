@@ -3,15 +3,15 @@
 import { useEscClose } from "./hooks";
 
 /**
- * 새 이메일 만들기 선택 팝업 — 생성(AI 스튜디오) / 업로드(HTML).
- * 구 좌측 레일의 "이메일" 메뉴와 동일한 두 진입점을 발송 화면 1단계로 옮긴 것.
+ * Create-new-email choice popup — generate (AI Studio) / upload (HTML).
+ * The same two entry points as the old left rail's "이메일" menu, moved into step 1 of the send screen.
  */
 export default function CreateEmailDialog({
   open, onClose, onUpload,
 }: {
   open: boolean;
   onClose: () => void;
-  /** HTML 직접 입력(AddTemplateDialog) 열기. */
+  /** Open direct HTML input (AddTemplateDialog). */
   onUpload: () => void;
 }) {
   useEscClose(open, onClose);

@@ -4,9 +4,9 @@ import RecipientInput from "./RecipientInput";
 import { useEscClose } from "./hooks";
 
 /**
- * 직접 입력(ad-hoc) 팝업 — 발송 화면 2단계를 컴팩트하게 유지하기 위해
- * 자유텍스트/CSV 입력(RecipientInput)을 팝업으로 분리.
- * 텍스트가 단일 소스: 부모(SendForm)가 보관하고 파싱도 부모가 수행한다.
+ * Ad-hoc input popup — free-text/CSV input (RecipientInput) is split into a popup
+ * to keep step 2 of the send screen compact.
+ * The text is the single source: the parent (SendForm) holds it and also does the parsing.
  */
 export default function AdhocDialog({
   open, value, count, onTextChange, onSaveAsList, onClose,

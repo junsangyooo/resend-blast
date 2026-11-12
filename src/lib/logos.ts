@@ -1,8 +1,8 @@
 /**
- * 헤더 로고 레지스트리.
+ * Header logo registry.
  * Built-in logos come from brand.config `logos` — always present.
- * 업로드된 커스텀 로고는 data/logos.json 에 누적(gitignore, 서버 보존).
- * 이미지 파일 자체는 설정된 스토리지 백엔드에 올라간다(lib/storage, 기본 Azure Blob).
+ * Uploaded custom logos accumulate in data/logos.json (gitignored, kept on the server).
+ * The image files themselves go to the configured storage backend (lib/storage, default Azure Blob).
  */
 import fs from "fs/promises";
 import path from "path";
@@ -37,7 +37,7 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "logo";
 }
 
-/** 커스텀 로고 삭제. 내장 로고는 보호. blob 자체는 안 지운다(다른 발송에서 참조 중일 수 있음). */
+/** Delete a custom logo. Built-in logos are protected. The blob itself is not deleted (other sends may still reference it). */
 export async function removeLogo(id: string): Promise<{ ok: boolean; reason?: string }> {
   if (BUILTIN_LOGOS.some((l) => l.id === id)) {
     return { ok: false, reason: "내장 로고는 삭제할 수 없습니다" };

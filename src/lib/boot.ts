@@ -1,7 +1,7 @@
 /**
  * Node-only boot tasks, loaded from instrumentation.ts (never bundled for the Edge runtime).
- * - 재시작으로 끊긴 `running` send 를 즉시 aborted 로 정리 (예약 발송이면 예약 탭에 문제로 표시).
- * - 예약 발송 스케줄러 시작: 꺼져 있던 동안 지난 예약은 '실행 안 됨', 아직 안 온 예약은 그대로 살아난다.
+ * - Clean up `running` sends cut off by a restart by marking them aborted right away (scheduled sends are shown as a problem in the schedule tab).
+ * - Start the scheduled-send scheduler: schedules that passed while the server was off become '실행 안 됨', and future ones are restored as-is.
  */
 import { abortOrphanedSends } from "./send-log";
 import { startScheduler } from "./scheduler";
@@ -13,7 +13,7 @@ export async function boot(): Promise<void> {
     // eslint-disable-next-line no-console
     if (fixed > 0) console.log(`[boot] marked ${fixed} interrupted send(s) as aborted`);
   } catch (e) {
-    // 부팅을 막지 않는다. /api/sends 에도 lazy cleanup 백업이 있음.
+    // Don't block boot. /api/sends also has a lazy-cleanup backup.
     // eslint-disable-next-line no-console
     console.warn("[boot] abortOrphanedSends failed:", e);
   }

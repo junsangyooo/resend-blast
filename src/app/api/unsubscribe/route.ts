@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * 수신거부 (공개 — 미들웨어 bypass, 토큰 서명으로 진위 검증).
- * - GET  : 확인 페이지(POST 버튼). GET 자체로는 억제하지 않음(메일 스캐너의 prefetch 로 인한 오거부 방지).
- * - POST : 실제 억제 처리. Gmail/Yahoo 의 List-Unsubscribe-Post(One-Click) 도 POST 로 도달.
+ * Unsubscribe (public — middleware bypass, authenticity verified by token signature).
+ * - GET  : confirmation page (POST button). GET itself does not suppress (prevents false unsubscribes from mail-scanner prefetch).
+ * - POST : performs the actual suppression. Gmail/Yahoo List-Unsubscribe-Post (One-Click) also arrives as POST.
  */
 function page(title: string, msg: string, opts?: { token?: string; email?: string }): string {
   const form = opts?.token
@@ -48,14 +48,14 @@ export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token") ?? "";
   const v = verifyUnsubToken(token, "unsub");
   if (!v) {
-    // 위조·손상된 토큰 — 아무것도 억제하지 않고 400 (정보 노출 없음).
+    // Forged or corrupted token — suppress nothing and return 400 (no information exposed).
     return NextResponse.json({ ok: false }, { status: 400 });
   }
-  // 이미 억제 상태면 확인 메일 중복 발송 안 함(반복 클릭/스캐너 방지).
+  // If already suppressed, don't send the confirmation mail again (guards against repeat clicks/scanners).
   const already = await isSuppressed(v.email);
   await suppress(v.email, "unsubscribe", `send:${v.sendId}`);
   if (!already) {
-    // 확인 메일(재구독 버튼 포함) — best-effort, 실패해도 수신거부는 유효.
+    // Confirmation mail (with re-subscribe button) — best-effort; the unsubscribe stays valid if it fails.
     await sendUnsubscribeConfirmation(v.email, resubscribeUrl(v.email, v.sendId)).catch(() => {});
   }
 

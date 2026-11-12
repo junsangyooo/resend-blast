@@ -7,7 +7,7 @@ import { isAdminAsync } from "@/lib/admins";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** 수신거부/반송/스팸신고 억제 목록. 조회·직접 추가는 누구나, 해제는 관리자만(오등록 복구용). */
+/** Suppression list (unsubscribed/bounced/spam-reported). Anyone can view and add manually; only admins can remove (to recover from mistaken entries). */
 export async function GET() {
   return NextResponse.json({ suppressions: await listSuppressions() });
 }
@@ -25,7 +25,7 @@ export async function DELETE(req: NextRequest) {
   }
 }
 
-/** 직접 추가 — 메일·전화 등으로 받은 수신거부 요청을 기록 (List-Unsubscribe mailto 포함). */
+/** Manual add: record unsubscribe requests received by email, phone, etc. (including List-Unsubscribe mailto). */
 export async function POST(req: NextRequest) {
   try {
     const actor = await requireUserEmail();

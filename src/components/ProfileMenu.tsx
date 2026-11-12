@@ -7,9 +7,9 @@ import { useEscClose } from "./hooks";
 export type UserProfile = { name?: string | null; picture?: string | null };
 
 /**
- * 탑바 우측 프로필 메뉴 — 구글 프로필 원형 아바타를 누르면
- * 설정 / 테마 / 로그아웃 드롭다운이 열린다 (구 좌측 레일 대체).
- * 사진이 없거나 로드 실패하면 이니셜 아바타로 폴백.
+ * Profile menu on the right of the top bar: clicking the round Google profile avatar
+ * opens a settings / theme / logout dropdown (replaces the old left rail).
+ * Falls back to an initials avatar when there is no photo or it fails to load.
  */
 export default function ProfileMenu({
   me, profile, onOpenSettings, onLogout,

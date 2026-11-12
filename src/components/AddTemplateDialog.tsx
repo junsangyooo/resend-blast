@@ -41,15 +41,15 @@ function localSrcCount(html: string): number {
 }
 
 /**
- * 새 이메일 업로드 (HTML 파일·코드 + 이미지). 기존 이메일 수정은 스튜디오(/studio?edit=)에서 한다.
- * 내부 ID 는 서버가 자동으로 만들고, 사용자는 목록에 보일 이름(선택)만 정한다.
+ * Upload a new email (HTML file/code + images). Editing an existing email is done in the studio (/studio?edit=).
+ * The server generates the internal ID automatically; the user only sets the (optional) name shown in the list.
  */
 export default function AddTemplateDialog({
   open, onClose, onSaved,
 }: {
   open: boolean;
   onClose: () => void;
-  /** 저장 후 호출 — 저장된 ID 를 넘겨 호출측이 바로 선택할 수 있게 한다. */
+  /** Called after saving — passes the saved ID so the caller can select it right away. */
   onSaved: (savedName?: string) => void;
 }) {
   const [title, setTitle] = useState("");
@@ -67,7 +67,7 @@ export default function AddTemplateDialog({
   const bodyRef = useRef("");
   bodyRef.current = body;
 
-  // 열 때마다 폼 초기화
+  // Reset the form every time it opens
   useEffect(() => {
     if (!open) return;
     setErr(""); setFileName(""); setAtts([]);
@@ -78,8 +78,8 @@ export default function AddTemplateDialog({
 
   if (!open) return null;
 
-  // .html 파일을 읽어 본문에 채운다. 전체 문서면 <body> 안쪽만 추출.
-  // 로드 직후 현재 첨부 목록으로 src 재치환 — 이미지를 먼저 올리고 HTML 을 나중에 올려도 동작.
+  // Read the .html file and fill the body. For a full document, extract only the inside of <body>.
+  // Right after loading, re-substitute src with the current attachment list — works even if images are uploaded before the HTML.
   async function loadHtmlFile(file: File) {
     setErr("");
     try {
@@ -152,7 +152,7 @@ export default function AddTemplateDialog({
       if (window.confirm("저장했습니다. AI 스튜디오에서 이어서 다듬을까요?")) {
         window.location.href = `/studio?edit=${encodeURIComponent(j.name)}`;
       }
-      // 다음 open 시 useEffect 가 모드에 맞게 초기화하므로 여기서는 굳이 reset 안 함.
+      // The useEffect re-initializes for the mode on the next open, so no reset is needed here.
     } catch (e: any) {
       setErr(e?.message ?? "저장 실패");
     } finally {

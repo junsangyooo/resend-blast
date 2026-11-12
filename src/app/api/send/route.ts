@@ -16,7 +16,7 @@ import { formatKst } from "@/lib/kst";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const DEDUPE_WINDOW_MS = 90_000; // 90초 내 동일 내용 재발송은 중복으로 차단(더블클릭/재시도)
+const DEDUPE_WINDOW_MS = 90_000; // re-sending identical content within 90s is blocked as a duplicate (double-click/retry)
 
 type SendBody = {
   template: string;
@@ -29,11 +29,11 @@ type SendBody = {
   from?: string;
   replyTo?: string;
   isAd?: boolean;
-  /** 본인 검수용 테스트 발송 — 현재 로그인 사용자에게만 1건. */
+  /** Test send for self-review: one message, only to the currently logged-in user. */
   testToSelf?: boolean;
   /** Re-send / reminder started from a past send (recorded as kind "followup"). */
   followupOf?: string;
-  /** 멱등성 중복 차단을 무시하고 강제 발송. */
+  /** Ignore the idempotency duplicate block and force the send. */
   force?: boolean;
   /** Schedule instead of sending now (UTC ISO). */
   scheduledAt?: string;
@@ -69,14 +69,14 @@ export async function POST(req: NextRequest) {
     if (err) return json({ error: err }, 400);
   }
 
-  // Ad mail must carry an unsubscribe link in the body (정보통신망법 §50). If the design has none,
+  // Ad mail must carry an unsubscribe link in the body (Korean Network Act §50). If the design has none,
   // a fixed line is appended below the content — the design itself is never touched.
   const html = isAd ? ensureUnsubFooter(built.html) : built.html;
   const hasUnsub = hasUnsubLink(html);
   const subject = isAd && !/^\(광고\)/.test(built.subject) ? `(광고) ${built.subject}` : built.subject;
   const htmlHash = contentFingerprint(built.html, built.subject);
 
-  // ── 1) 수신자 산출 ──
+  // ── 1) Resolve recipients ──
   let merged: Recipient[];
   const memberOrigin = new Map<string, string | null>();
   let adhocParsed = { invalid: [] as string[], duplicates: [] as string[] };
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 2) 억제목록(수신거부/반송/스팸신고) 제외 — 테스트 발송은 제외하지 않음 ──
+  // ── 2) Exclude the suppression list (unsubscribed/bounced/spam-reported); test sends are not filtered ──
   let excludedSuppressed = 0;
   if (!isTest) {
     const supp = await suppressedSet(merged.map((r) => r.email));
@@ -139,12 +139,12 @@ export async function POST(req: NextRequest) {
     if (merged.length === 0) return json({ error: "모든 수신자가 수신거부/반송 처리되어 발송 대상이 없습니다", excludedSuppressed }, 400);
   }
 
-  // ── 3) 수신자 수 상한 ──
+  // ── 3) Recipient count cap ──
   if (!isTest && merged.length > MAX_RECIPIENTS_PER_SEND) {
     return json({ error: `1회 발송 최대 ${MAX_RECIPIENTS_PER_SEND}명을 초과했습니다 (${merged.length}명). 리스트를 나눠 보내세요.` }, 400);
   }
 
-  // ── 4) From / reply-to 검증 — 미등록 발신자는 조용한 폴백 없이 거부 ──
+  // ── 4) Validate From / reply-to: unregistered senders are rejected with no silent fallback ──
   const finalFrom = String(body.from ?? "").trim() || FROM_DEFAULT;
   if (!isFromAllowed(finalFrom)) return json({ error: "허용되지 않은 발신자 도메인입니다" }, 400);
   if (!(await isSenderAllowedFor(finalFrom, sentBy))) {
@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
   }
   const replyTo = resolveReplyTo(body.replyTo);
 
-  // ── 5) 멱등성: 90초 내 동일 내용 재발송/재예약 차단 (테스트 제외) ──
+  // ── 5) Idempotency: block re-send/re-schedule of identical content within 90s (tests excluded) ──
   const hash = contentHash({
     sentBy, from: finalFrom, subject,
     templateName: templateName + (scheduledAt ? `@${scheduledAt.toISOString()}` : ""),
@@ -165,7 +165,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 6) 사용자 발송 레이트리밋 — 즉시 발송만. 예약은 실행 시점에 확인하고 넘치는 인원은 '미발송'으로 남긴다.
+  // ── 6) Per-user send rate limit: immediate sends only. Schedules are checked at run time and the overflow is left as '미발송'.
   if (!isTest && !scheduledAt) {
     const [hourVol, dayVol] = await Promise.all([
       userSendVolume(sentBy, 60 * 60 * 1000),
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
 
   if (!process.env.RESEND_EMAIL_TRACKING_API_KEY) return json({ error: "RESEND_EMAIL_TRACKING_API_KEY 없음" }, 500);
 
-  // ── 7) send 레코드 생성 ──
+  // ── 7) Create the send record ──
   const sendId = newSendId();
   const followupOf = !isTest && body.followupOf ? String(body.followupOf) : undefined;
   const record: SendRecord = {

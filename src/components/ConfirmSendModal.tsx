@@ -30,11 +30,11 @@ function defaultScheduleValue(): KstValue {
 }
 
 /**
- * 발송 최종 확인 — 3-pane 대형 모달.
- *  좌: 발송 요약 (이메일·발신자·리스트·제외·수신자 수) + 지금 보내기 / 예약
- *  중앙: 선택된 수신자에게 실제로 도착할 모습 (개인화 치환 + 광고성 수신거부 문구까지 실제 발송과 동일)
- *  우: 전체 수신자 리스트 (검색·클릭으로 미리보기 대상 전환, 이미 받은 사람 표시)
- * 발송(예약) 버튼을 누를 때 이미 받은 사람이 있으면 취소 / 제외하고 전송 / 일괄 전송을 고르게 한다.
+ * Final send confirmation — large 3-pane modal.
+ *  Left: send summary (email, sender, lists, exclusions, recipient count) + send now / schedule
+ *  Center: what the selected recipient will actually receive (personalization + promotional unsubscribe text, identical to the real send)
+ *  Right: full recipient list (search; click to switch the preview target; marks people who already received it)
+ * When the send (schedule) button is pressed and some recipients already received it, ask to cancel / send excluding them / send to all.
  */
 export default function ConfirmSendModal({
   template,
@@ -81,7 +81,7 @@ export default function ConfirmSendModal({
 
   useEscClose(!askPrior, onClose);
 
-  // 토큰 보존 HTML + 수신거부 명단 + 이미 받은 사람 1회 로드
+  // Load token-preserving HTML + suppression list + already-received people once
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -125,7 +125,7 @@ export default function ConfirmSendModal({
   }
 
   const adSubject = isAd && !/^\(광고\)/.test(subject) ? `(광고) ${subject}` : subject;
-  // 실제 발송과 같은 규칙: 광고성이면 수신거부 링크가 없을 때 기본 문구를 붙인다.
+  // Same rule as the real send: for promotional mail, append the default text when there is no unsubscribe link.
   const sendHtml = rawHtml === null ? null : isAd ? ensureUnsubFooter(rawHtml) : rawHtml;
   const footerAdded = !!rawHtml && !!sendHtml && sendHtml !== rawHtml;
   const nameRisk = rawHtml !== null && hasBlankNameRisk(rawHtml + " " + adSubject);
@@ -134,7 +134,7 @@ export default function ConfirmSendModal({
   const suppressedCount = useMemo(() => recipients.filter((r) => isSupp(r.email)).length, [recipients, suppressed]); // eslint-disable-line react-hooks/exhaustive-deps
   const effectiveCount = recipients.length - suppressedCount;
 
-  // 이미 받은 사람 — 어차피 빠지는 수신거부자는 셈에서 뺀다.
+  // Already-received people — unsubscribed recipients, who get dropped anyway, are left out of the count.
   const priorHits = useMemo(
     () => (prior ? Array.from(prior.values()).filter((h) => !isSupp(h.email)) : []),
     [prior, suppressed], // eslint-disable-line react-hooks/exhaustive-deps
@@ -200,7 +200,7 @@ export default function ConfirmSendModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="card w-[min(1240px,96vw)] h-[90vh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        {/* 헤더 */}
+        {/* Header */}
         <div className="px-5 py-3 border-b border-border flex items-center justify-between shrink-0">
           <div>
             <h3 className="text-base font-semibold">최종 확인</h3>
@@ -209,9 +209,9 @@ export default function ConfirmSendModal({
           <button onClick={onClose} className="icon-btn" aria-label="닫기">✕</button>
         </div>
 
-        {/* 본문 3-pane */}
+        {/* Body 3-pane */}
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)_290px]">
-          {/* 좌: 요약 */}
+          {/* Left: summary */}
           <div className="border-b lg:border-b-0 lg:border-r border-border p-4 overflow-y-auto space-y-4">
             <dl className="text-[13px] space-y-2.5">
               <Row label="이메일">{templateTitle}</Row>
@@ -240,7 +240,7 @@ export default function ConfirmSendModal({
               {footerAdded && <Row label="수신거부 문구">하단 자동 추가</Row>}
             </dl>
 
-            {/* 지금 / 예약 */}
+            {/* Now / scheduled */}
             <div className="space-y-2">
               <div className="grid grid-cols-2 gap-1.5">
                 <button className={mode === "now" ? "btn text-xs justify-center py-2 border border-brand bg-brand/10 text-brand" : "btn-ghost text-xs justify-center py-2"} onClick={() => setMode("now")}>지금 보내기</button>
@@ -258,7 +258,7 @@ export default function ConfirmSendModal({
             <p className="text-[12px] text-muted">발송 후 회수 불가 · 진행 중 중단만 가능</p>
           </div>
 
-          {/* 중앙: 개인화 완료 미리보기 */}
+          {/* Center: personalized preview */}
           <div className="border-b lg:border-b-0 lg:border-r border-border flex flex-col min-h-0 bg-surface2/40">
             <div className="px-4 py-2 border-b border-border shrink-0 bg-surface">
               <div className="text-[11px] text-muted">받는 사람: <span className="font-mono">{selected ? `${selected.name ? `${selected.name} ` : ""}<${selected.email}>` : "—"}</span></div>
@@ -280,7 +280,7 @@ export default function ConfirmSendModal({
             </div>
           </div>
 
-          {/* 우: 수신자 리스트 */}
+          {/* Right: recipient list */}
           <div className="flex flex-col min-h-0">
             <div className="p-3 border-b border-border shrink-0 space-y-2">
               <input
@@ -337,7 +337,7 @@ export default function ConfirmSendModal({
           </div>
         </div>
 
-        {/* 푸터 */}
+        {/* Footer */}
         <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2 shrink-0">
           <button onClick={onClose} className="btn-ghost">취소</button>
           <button onClick={onPrimary} disabled={!ready} className="btn-primary">
@@ -348,7 +348,7 @@ export default function ConfirmSendModal({
         </div>
       </div>
 
-      {/* 이미 받은 사람 — 취소 / 제외하고 전송 / 일괄 전송 */}
+      {/* Already-received people — cancel / send excluding them / send to all */}
       {askPrior && (
         <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4" onClick={(e) => { e.stopPropagation(); setAskPrior(false); }}>
           <div className="card w-full max-w-lg p-5 space-y-3" onClick={(e) => e.stopPropagation()}>

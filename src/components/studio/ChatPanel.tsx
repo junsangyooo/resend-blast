@@ -1,6 +1,6 @@
 "use client";
-// AI 채팅 패널. 대화 이력은 메모리에만 (나가면 소멸 — 설계 결정).
-// 진행 표시: 요청 분석 → 이메일 작성(글자 수) → 형식 검사 → 반영 완료, 경과 시간과 중지 버튼.
+// AI chat panel. Conversation history lives in memory only (lost on leaving — a design decision).
+// Progress display: analyze request → write email (char count) → format check → applied, with elapsed time and a stop button.
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, ComposeEvent, ComposeMode, ImageRef } from "@/lib/ai/types";
 import { EXT_BY_TYPE, MAX_UPLOAD_BYTES } from "@/lib/storage/image-validation";
@@ -235,7 +235,7 @@ export default function ChatPanel({ mode, isNew, getCurrent, onResult, onBusy, c
         )}
       </div>
 
-      {/* 입력 */}
+      {/* Input */}
       <div className="px-3 pb-4 pt-2 shrink-0">
         <div className={`rounded-2xl border bg-surface transition ${busy ? "border-border" : "border-border focus-within:border-brand/60 focus-within:ring-2 focus-within:ring-brand/15"}`}>
           {atts.length > 0 && (

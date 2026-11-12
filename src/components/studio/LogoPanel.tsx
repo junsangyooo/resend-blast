@@ -1,5 +1,5 @@
 "use client";
-// 블록 이메일 로고 설정 (스튜디오 상단 '로고 ▾' 팝오버). 로고 목록·표시 여부·로고 아래 한 줄.
+// Block-email logo settings (the studio top bar's '로고 ▾' popover). Logo list, visibility, and the line under the logo.
 import { useEffect, useState } from "react";
 import type { TemplateSpec } from "@/lib/blocks";
 import { brand } from "@/brand.config";
@@ -14,7 +14,7 @@ export default function LogoPanel({ spec, onPatch }: {
   useEffect(() => {
     fetch("/api/logos").then((r) => r.json()).then((j) => setLogos(j.logos ?? [])).catch(() => {});
   }, []);
-  // spec.logo 미설정이면 렌더러가 brand 기본 로고로 폴백 — 선택 표시도 같은 기준.
+  // If spec.logo is unset the renderer falls back to the brand default logo — the selection display uses the same rule.
   const effectiveLogoUrl = spec.logo?.url ?? brand.email.headerLogo.url;
   return (
     <div className="rounded-xl border border-border bg-surface p-2.5 space-y-2 text-[12px]">
@@ -26,7 +26,7 @@ export default function LogoPanel({ spec, onPatch }: {
             onClick={() => onPatch({ logo: { url: l.url, width: l.width, alt: l.label } })}>{l.label}</button>
         ))}
         <label className="flex items-center gap-1 ml-auto">
-          {/* 끄면 tagline 도 비운다 — 숨긴 로고 밑 문구가 spec 에 남지 않게. */}
+          {/* Turning it off clears the tagline too — so text under a hidden logo doesn't linger in the spec. */}
           <input type="checkbox" checked={spec.showLogo} onChange={(e) => onPatch(e.target.checked ? { showLogo: true } : { showLogo: false, tagline: "" })} /> 표시
         </label>
       </div>

@@ -55,8 +55,8 @@ function statusKey(s: Schedule, now: number = Date.now()): string {
 }
 
 /**
- * 예약 발송 관리 — 예정된 예약(시간 변경·취소·수신자 빼기)과 지난 예약(30일)의 결과.
- * 실행 안 됨·한도 초과·실패는 빨간 줄로 바로 보이고, 펼치면 수신자별 상태가 나온다.
+ * Scheduled send management: upcoming schedules (change time, cancel, remove recipients) and results of past ones (30 days).
+ * Not-run, over-limit and failed items show as red rows right away; expanding one shows per-recipient status.
  */
 export default function ScheduledSends({ active, onChanged, onFollowup }: {
   active: boolean;

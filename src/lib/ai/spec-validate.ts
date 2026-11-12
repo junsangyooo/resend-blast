@@ -1,4 +1,4 @@
-// AI 출력 spec 의 스키마 검증 + 정제 (허용 필드만 복사, id 보장). 순수 함수.
+// Schema validation + sanitizing of the AI output spec (copy allowed fields only, guarantee ids). Pure function.
 import { type Block, type BlockType, type GridCard, type TemplateSpec, newId, sanitizeInline } from "../blocks";
 
 const TYPES = new Set<BlockType>(["heading","text","button","badge","kicker","numbered","agenda","grid","image","divider"]);
@@ -95,7 +95,7 @@ function cleanBlock(errs: Errs, i: number, raw: any): Block | null {
     if (!Array.isArray(raw.cards)) errs.push(`${p}.cards: 배열이어야 함`);
     else b.cards = raw.cards.map((c: any, j: number) => cleanCard(errs, `${p}.cards[${j}]`, c));
   }
-  // undefined 필드 정리 (JSON 저장 시 노이즈 방지)
+  // Strip undefined fields (avoids noise when saving JSON)
   for (const k of Object.keys(b) as (keyof Block)[]) if (b[k] === undefined) delete b[k];
   return b;
 }

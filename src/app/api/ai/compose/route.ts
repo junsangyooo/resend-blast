@@ -12,16 +12,16 @@ import type { ComposeEvent, ComposeRequest } from "@/lib/ai/types";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_BODY_BYTES = 400_000; // spec+이력 상한 (이메일 spec 은 수 KB — 여유롭게)
+const MAX_BODY_BYTES = 400_000; // spec + history cap (an email spec is a few KB — generous margin)
 const MAX_MESSAGES = 40;
 const INFLIGHT_TTL_MS = 5 * 60_000;
-const inFlight = new Map<string, number>(); // 사용자당 동시 1건 — value = 시작 시각(TTL 로 stale lock 방지)
+const inFlight = new Map<string, number>(); // one concurrent request per user — value = start time (TTL prevents stale locks)
 
 function json(obj: unknown, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
 }
 
-/** SDK 1회 호출. 텍스트 델타를 emit 하되 첫 ``` 이후(코드블록)는 채팅에 흘리지 않는다. */
+/** One SDK call. Emits text deltas, but nothing after the first ``` (code block) is streamed to the chat. */
 async function runOnce(
   system: string, prompt: string, emit: (e: ComposeEvent) => void, signal: AbortSignal,
   auth: { source: AiAuthSource; env: Record<string, string | undefined> },
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
   if (body.messages[body.messages.length - 1].role !== "user") return json({ error: "마지막 메시지는 user" }, 400);
   const startedAt = inFlight.get(user);
   if (startedAt !== undefined && Date.now() - startedAt < INFLIGHT_TTL_MS) return json({ error: "이전 요청 진행 중" }, 409);
-  // stamp 로 락 소유권 표시 — TTL 초과로 새 요청이 락을 가져간 뒤, 옛 요청의 delete 가 새 락을 지우지 않게.
+  // Mark lock ownership with a stamp — so that after a new request takes the lock past the TTL, the old request's delete doesn't remove the new lock.
   const stamp = Date.now();
   inFlight.set(user, stamp);
 

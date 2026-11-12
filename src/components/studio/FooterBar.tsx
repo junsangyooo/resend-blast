@@ -1,5 +1,5 @@
 "use client";
-// 푸터 설정 — 조립기 맨 아래(미리보기의 푸터 위치와 같은 순서). AI 없이 여기서 직접 수정.
+// Footer settings — at the very bottom of the builder (same order as the footer position in the preview). Edit directly here without AI.
 import type { TemplateSpec } from "@/lib/blocks";
 import { brand } from "@/brand.config";
 
@@ -10,7 +10,7 @@ export default function FooterBar({ spec, onPatch, onPatchFooter }: {
 }) {
   const on = spec.showFooter;
   const dim = on ? "" : "opacity-40";
-  // 부모(표시) off 시 자식 옵션은 해제 표시 + 비활성 — 값은 보존해 다시 켜면 복귀.
+  // When the parent (display) is off, child options show as unchecked + disabled — values are kept and restored when turned back on.
   const check = (label: string, checked: boolean, onChange: (v: boolean) => void) => (
     <label className={`flex items-center gap-1 ${dim}`}>
       <input type="checkbox" disabled={!on} checked={on && checked} onChange={(e) => onChange(e.target.checked)} /> {label}

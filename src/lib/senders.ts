@@ -1,15 +1,15 @@
 /**
- * 발신자(From) 레지스트리 — 내장 + 운영자 추가분(data/from.json).
+ * Sender (From) registry: built-in plus operator-added entries (data/from.json).
  *
- * 모델:
- *  - builtin: brand.config 의 공용 발신자 (삭제 불가)
- *  - shared : 관리자가 추가한 공용 발신자 (전원 사용 가능)
- *  - personal: 본인 주소(@도메인)에 닉네임을 붙인 개인 발신자 — 본인에게만 노출·사용 가능
- *  - 그 외에 모든 사용자는 저장 없이 "내 계정" 가상 옵션(본인 주소)으로 발송 가능
+ * Model:
+ *  - builtin: shared senders from brand.config (cannot be deleted)
+ *  - shared : shared senders added by an admin (usable by everyone)
+ *  - personal: a personal sender with a nickname on the user's own address (@domain), visible and usable only by that user
+ *  - Every other user can still send from the virtual "내 계정" option (their own address) without anything being stored
  *
- * 구버전 from.json(스코프 미기록)은 읽기 시 personal 로 마이그레이션 —
- * owner 는 value 의 주소부에서 추론한다 (e.g. "Jane Doe <jane.doe@example.com>").
- * 파일 쓰기는 atomic + per-key lock (다른 운영 데이터와 동일 패턴).
+ * Legacy from.json (no scope recorded) is migrated to personal on read;
+ * owner is inferred from the address part of value (e.g. "Jane Doe <jane.doe@example.com>").
+ * File writes use atomic + per-key lock (same pattern as the other operational data).
  */
 import fs from "fs/promises";
 import path from "path";
@@ -29,7 +29,7 @@ const DATA_DIR = path.join(process.cwd(), "data");
 const FROM_PATH = path.join(DATA_DIR, "from.json");
 const LOCK_KEY = "senders:from";
 
-/** "Name <a@b.com>" 또는 "a@b.com" 에서 주소부만 추출 (lowercase). 실패 시 null. */
+/** Extract only the address part from "Name <a@b.com>" or "a@b.com" (lowercase). Null on failure. */
 export function addressOf(value: string): string | null {
   const v = String(value ?? "").trim();
   const m = v.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>\s*$/);
@@ -38,7 +38,7 @@ export function addressOf(value: string): string | null {
   return null;
 }
 
-/** 이메일 로컬파트 → 표시 이름 자동 생성: "junsang.yoo" → "Junsang Yoo". */
+/** Email local part → auto-generated display name: "junsang.yoo" → "Junsang Yoo". */
 export function displayNameFromEmail(email: string): string {
   const local = String(email ?? "").split("@")[0] ?? "";
   return local
@@ -48,7 +48,7 @@ export function displayNameFromEmail(email: string): string {
     .join(" ") || email;
 }
 
-/** 저장 없이 합성되는 "내 계정" 가상 발신 옵션. */
+/** The virtual "내 계정" sender option, synthesized without storage. */
 export function myAccountOption(me: string): FromOption {
   const e = me.toLowerCase();
   return {
@@ -61,7 +61,7 @@ export function myAccountOption(me: string): FromOption {
 }
 
 function normalize(o: FromOption): FromOption {
-  // 구버전(스코프 미기록) → personal, owner 는 주소부에서 추론.
+  // Legacy entry (no scope recorded) → personal; owner is inferred from the address part.
   const scope = o.scope === "shared" || o.scope === "personal" ? o.scope : "personal";
   const owner = (o.owner ?? addressOf(o.value) ?? "").toLowerCase() || undefined;
   return { value: o.value, label: o.label || o.value, builtin: false, scope, owner };
@@ -75,8 +75,8 @@ async function readCustom(): Promise<FromOption[]> {
 }
 
 /**
- * 발신자 목록 — 내장 + 공용(shared) 전체 + 본인 소유 personal.
- * viewerEmail 미지정 시 내장+공용만. value 기준 중복 제거(내장 우선).
+ * Sender list: built-in + all shared + the viewer's own personal ones.
+ * Without viewerEmail, only built-in + shared. Deduped by value (built-in wins).
  */
 export async function listSenders(viewerEmail?: string | null): Promise<FromOption[]> {
   const viewer = viewerEmail?.toLowerCase() ?? null;
@@ -92,7 +92,7 @@ export async function listSenders(viewerEmail?: string | null): Promise<FromOpti
   return merged;
 }
 
-/** 관리자용: personal 포함 모든 커스텀 발신자 (owner 노출). 설정 UI 사각지대(레거시 personal) 방지. */
+/** For admins: every custom sender including personal (owner exposed). Avoids a settings-UI blind spot (legacy personal). */
 export async function listSendersAll(): Promise<FromOption[]> {
   const custom = await readCustom();
   const seen = new Set(BUILTIN_FROM.map((o) => o.value));
@@ -104,9 +104,9 @@ export async function listSendersAll(): Promise<FromOption[]> {
 }
 
 /**
- * 발송 시 from 검증: 내장/공용이거나, 주소부가 본인 이메일이면 허용.
- * (본인 주소는 어떤 표시 이름이든 허용 — "내 계정" 가상 옵션·개인 닉네임 모두 커버.
- *  남의 personal 발신자는 주소부가 다르므로 자동 차단된다.)
+ * Validate from at send time: allowed if built-in/shared, or if the address part is the user's own email.
+ * (The user's own address is allowed with any display name, covering both the "내 계정" virtual option and personal nicknames.
+ *  Someone else's personal sender has a different address part, so it is blocked automatically.)
  */
 export async function isSenderAllowedFor(value: string, senderEmail: string): Promise<boolean> {
   const v = String(value ?? "").trim();
@@ -118,8 +118,8 @@ export async function isSenderAllowedFor(value: string, senderEmail: string): Pr
 }
 
 /**
- * 발신자 추가. shared 는 관리자만(라우트에서 강제), personal 은 본인 주소만 허용.
- * personal 은 1인 1개 — 기존 본인 personal 항목이 있으면 교체(닉네임 변경).
+ * Add a sender. shared is admin-only (enforced in the route); personal allows only the user's own address.
+ * One personal sender per user: an existing personal entry of theirs is replaced (nickname change).
  */
 export async function addSender(
   value: string,
@@ -132,7 +132,7 @@ export async function addSender(
   if (!ANGLE_FORM.test(v) && !BARE_FORM.test(v)) {
     throw new Error(`형식: "이름 <addr@${SENDER_DOMAIN}>" 또는 "addr@${SENDER_DOMAIN}"`);
   }
-  // 표시 이름 검증: RFC 5322 를 깨거나 헤더를 오염시키는 특수문자 차단.
+  // Validate the display name: block special characters that break RFC 5322 or pollute headers.
   const displayPart = v.match(/^(.*?)\s*</)?.[1]?.trim() ?? "";
   if (/[<>"\\,;:\r\n]/.test(displayPart)) {
     throw new Error('표시 이름에는 < > " , ; : 줄바꿈 문자를 쓸 수 없습니다');
@@ -147,7 +147,7 @@ export async function addSender(
     await fs.mkdir(DATA_DIR, { recursive: true });
     const custom = await readCustom();
     const next = opts.scope === "personal"
-      ? custom.filter((o) => !(o.scope === "personal" && o.owner === owner)) // 본인 닉네임 교체
+      ? custom.filter((o) => !(o.scope === "personal" && o.owner === owner)) // replace the user's own nickname
       : custom;
     if (BUILTIN_FROM.some((o) => o.value === v) || next.some((o) => o.value === v)) {
       throw new Error("이미 등록된 발신자입니다");
@@ -165,8 +165,8 @@ export async function addSender(
 }
 
 /**
- * 커스텀 발신자 삭제. 내장은 보호.
- * shared 는 관리자만(라우트에서 강제), personal 은 소유자 본인 또는 관리자.
+ * Delete a custom sender. Built-in ones are protected.
+ * shared is admin-only (enforced in the route); personal can be deleted by its owner or an admin.
  */
 export async function removeSender(
   value: string,

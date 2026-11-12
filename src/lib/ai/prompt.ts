@@ -1,4 +1,4 @@
-// lib/ai/prompt.ts — 시스템/턴 프롬프트 조립. 브랜드 값은 전부 brand.config 주입 — 하드코딩 금지.
+// lib/ai/prompt.ts — assembles the system/turn prompts. All brand values are injected from brand.config; no hardcoding.
 import { brand } from "../../brand.config";
 import { EXAMPLE_SPECS } from "./examples";
 import type { ChatMessage, ComposeMode, ImageRef } from "./types";

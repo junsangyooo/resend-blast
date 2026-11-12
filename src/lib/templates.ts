@@ -174,7 +174,7 @@ async function assertNotDuplicate(name: string, overwrite: boolean): Promise<voi
   }
 }
 
-/** 블록 조립기 결과 저장: {name}.json(spec) + {name}.html(렌더) + _meta.json(제목/설명+감사). */
+/** Save block-builder output: {name}.json (spec) + {name}.html (render) + _meta.json (title/description + audit). */
 /** Resolve the id for a save: existing id when editing, a fresh auto id for new emails. */
 function resolveSaveName(name: string | undefined, overwrite: boolean): string {
   const n = String(name ?? "").trim();
@@ -281,8 +281,8 @@ export async function duplicateTemplate(name: string, actorEmail?: string): Prom
   return { name: id, title };
 }
 
-/** 영구 삭제: {name}.html + {name}.json + _meta 항목 제거. 되돌릴 수 없음.
- *  생성자/관리자만 — 생성자 기록이 없는 레거시 항목은 관리자만 (오삭제 방지). */
+/** Permanent delete: removes {name}.html + {name}.json + the _meta entry. Irreversible.
+ *  Creator/admin only — legacy entries with no creator record are admin-only (prevents accidental deletion). */
 export async function deleteTemplate(name: string, actorEmail?: string) {
   if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new Error("잘못된 이메일 이름");
   const owner = (await readMeta())[name]?.createdBy;

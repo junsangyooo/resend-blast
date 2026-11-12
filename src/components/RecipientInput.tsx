@@ -9,7 +9,7 @@ const DEFAULT_PLACEHOLDER =
 
 function downloadSampleCsv() {
   const csv = "email,name,company,title\nhong@example.com,홍길동,Acme,매니저\njane@example.com,Jane Doe,Acme,Director\n";
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM: 엑셀 한글 호환
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM: Excel Korean compatibility
   const u = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = u;
@@ -18,7 +18,7 @@ function downloadSampleCsv() {
   URL.revokeObjectURL(u);
 }
 
-/* ── 지원 형식 인포 팝업 ── */
+/* ── Supported-formats info popup ── */
 function FormatInfoModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
@@ -32,7 +32,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
-          {/* ① 파일 업로드 — 고정 헤더 규칙 */}
+          {/* ① File upload — fixed header rules */}
           <section>
             <div className="text-[12px] font-bold mb-2">📁 CSV / Excel 업로드 — 첫 행 헤더가 아래 이름과 정확히 일치해야 인식됩니다</div>
             <div className="rounded-lg border border-border overflow-hidden">
@@ -69,7 +69,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
             </p>
           </section>
 
-          {/* ② 직접 입력 */}
+          {/* ② Direct input */}
           <section>
             <div className="text-[12px] font-bold mb-2">⌨ 직접 입력 — 한 줄에 한 명, 붙여넣으면 바로 목록에 반영됩니다</div>
             <div className="input font-mono text-[12px] whitespace-pre leading-relaxed text-text/80 pointer-events-none select-text">
@@ -78,7 +78,7 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
             <p className="mt-1.5 text-[10.5px] text-muted">엑셀·구글시트·노션 표에서 복사해 그대로 붙여넣으면 됩니다(이름/이메일만 — 회사/직함은 CSV 업로드로).</p>
           </section>
 
-          {/* ③ 개인화 */}
+          {/* ③ Personalization */}
           <section className="rounded-lg border border-border bg-surface2/30 px-3 py-2.5">
             <div className="text-[11px] text-text/80 leading-relaxed">
               <strong>개인화</strong> — 본문·제목에{" "}
@@ -100,13 +100,13 @@ function FormatInfoModal({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * 수신자 입력 공용 컴포넌트.
- * 탭/파이프/쉼표/「이름 <이메일>」 어떤 형식이든 parseRecipientGrid 로 이름+이메일을 매핑한다.
- * CSV/Excel 업로드는 고정 헤더(email 필수, name 권장, company/title 선택)만 인식 — 컬럼 매핑 UI 없음.
+ * Shared recipient-input component.
+ * Tab/pipe/comma/「name <email>」 — any format is mapped to name+email via parseRecipientGrid.
+ * CSV/Excel upload recognizes only fixed headers (email required, name recommended, company/title optional) — no column-mapping UI.
  *
- * - onAdd 제공 → accumulate 모드: 붙여넣기(paste) 즉시 자동으로 onAdd 호출 후 입력을 비운다.
- *   (수동 타이핑 등 paste 가 아닌 입력은 blur 시 커밋.) CSV는 미리보기 확인 후 "N명 추가" 버튼으로 커밋.
- * - onAdd 없음 → live 모드: 입력이 바뀔 때마다 onChange(rows) 호출, 커밋 없음.
+ * - onAdd provided → accumulate mode: on paste, onAdd is called immediately and the input is cleared.
+ *   (Non-paste input such as manual typing is committed on blur.) CSV is committed via the "N명 추가" button after previewing.
+ * - onAdd absent → live mode: onChange(rows) is called on every input change, no commit.
  */
 export default function RecipientInput({
   onAdd,
@@ -120,12 +120,12 @@ export default function RecipientInput({
 }: {
   onAdd?: (rows: Recipient[]) => void;
   onChange?: (rows: Recipient[]) => void;
-  /** controlled 텍스트(부모가 발송 payload 로 보관). 없으면 내부 상태 사용. */
+  /** Controlled text (kept by the parent as the send payload). Falls back to internal state if absent. */
   value?: string;
   onTextChange?: (text: string) => void;
   placeholder?: string;
   showImport?: boolean;
-  /** 라벨 텍스트 — 주면 [라벨 ····· 업로드/인포] 헤더 행을 함께 렌더. */
+  /** Label text — if given, also renders a [label ····· upload/info] header row. */
   label?: string;
   className?: string;
 }) {
@@ -140,23 +140,23 @@ export default function RecipientInput({
   const [importing, setImporting] = useState(false);
   const [importErr, setImportErr] = useState("");
   const [infoOpen, setInfoOpen] = useState(false);
-  const [resultOpen, setResultOpen] = useState(false); // 인식/무시 펼침 패널
+  const [resultOpen, setResultOpen] = useState(false); // recognized/ignored expandable panel
   const fileRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const accumulate = typeof onAdd === "function";
 
-  // CSV/XLSX 업로드 결과 (고정 헤더 검증 완료본 — 매핑 UI 없음)
+  // CSV/XLSX upload result (validated against fixed headers — no mapping UI)
   const [csvFileName, setCsvFileName] = useState("");
   const [csvResult, setCsvResult] = useState<ImportResult | null>(null);
 
-  // 펼침 패널 내 이름 인라인 편집
+  // Inline name editing inside the expandable panel
   const [editingEmail, setEditingEmail] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
 
   const parsed = useMemo(() => parseRecipientGrid(text), [text]);
 
-  // 파싱 결과를 부모에 즉시 반영 (live·accumulate 공통).
+  // Push the parse result to the parent immediately (shared by live and accumulate).
   useEffect(() => {
     onChange?.(parsed.rows);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,7 +167,7 @@ export default function RecipientInput({
     setCsvResult(null);
     setImporting(true);
     try {
-      // xlsx 라이브러리는 무거우므로 임포트 시점에만 로드.
+      // The xlsx library is heavy, so load it only at import time.
       const mod = await import("@/lib/import-parser");
       const result = await mod.analyzeImportFile(file);
       setCsvFileName(file.name);
@@ -184,7 +184,7 @@ export default function RecipientInput({
     if (accumulate) {
       onAdd?.(csvResult.recipients);
     } else {
-      // live 모드는 텍스트가 단일 소스이므로 이름/이메일만 줄로 풀어서 합류(회사/직함은 CSV 전용이라 여기선 유실).
+      // In live mode the text is the single source, so expand only name/email into lines and merge (company/title are CSV-only and are lost here).
       const lines = csvResult.recipients.map((m) => (m.name ? `${m.name}\t${m.email}` : m.email));
       setText((cur) => (cur.trim() ? `${cur.trim()}\n${lines.join("\n")}` : lines.join("\n")));
     }
@@ -203,7 +203,7 @@ export default function RecipientInput({
     setEditingName("");
   }
 
-  /** 텍스트박스의 현재 내용을 커밋(onAdd)하고 비운다. accumulate 모드 전용. */
+  /** Commit the textbox's current content (onAdd) and clear it. Accumulate mode only. */
   function commitFromTextarea() {
     if (!accumulate) return;
     const el = taRef.current;
@@ -217,15 +217,15 @@ export default function RecipientInput({
 
   function handlePaste() {
     if (!accumulate) return;
-    // paste 내용이 DOM 값에 반영된 직후(다음 프레임)에 커밋 — 화면 깜빡임 없이 바로 비워진다.
+    // Commit right after the pasted content lands in the DOM value (next frame) — clears immediately without flicker.
     requestAnimationFrame(commitFromTextarea);
   }
 
   /**
-   * 텍스트박스에서 포커스가 빠져나갈 때 커밋한다. 단, 포커스가 이 컴포넌트 내부의
-   * 다른 요소(예: 펼침 패널의 "+ 이름 추가" 버튼)로 이동하는 경우는 커밋하지 않는다 —
-   * blur 는 클릭보다 먼저 발생하므로, 여기서 그냥 커밋해버리면 패널이 통째로 사라져
-   * 버튼 클릭이 씹히고 사용자가 고치려던 이름이 그대로 확정되어 버린다.
+   * Commit when focus leaves the textbox. But do not commit if focus moves to another
+   * element inside this component (e.g. the "+ 이름 추가" button in the expandable panel) —
+   * blur fires before click, so committing here would make the whole panel disappear,
+   * swallow the button click, and lock in the name the user was about to fix.
    */
   function handleBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
     if (!accumulate) return;
@@ -250,7 +250,7 @@ export default function RecipientInput({
 
   return (
     <div ref={containerRef} className={`space-y-2 ${className}`}>
-      {/* 헤더 행: 라벨 + 업로드/인포 */}
+      {/* Header row: label + upload/info */}
       {(label || showImport) && (
         <div className="flex items-center justify-between gap-2">
           <label className="text-[11px] text-muted">{label ?? ""}</label>
@@ -293,7 +293,7 @@ export default function RecipientInput({
         placeholder={placeholder ?? DEFAULT_PLACEHOLDER}
       />
 
-      {/* 결과 칩 — 클릭하면 상세 패널 토글 */}
+      {/* Result chip — click to toggle the detail panel */}
       {(rows.length > 0 || ignoredCount > 0 || dupCount > 0) && (
         <div className="flex items-center flex-wrap gap-1.5">
           {rows.length > 0 && (
@@ -310,7 +310,7 @@ export default function RecipientInput({
         </div>
       )}
 
-      {/* 펼침 패널 — 실패(무시)부터, 그 아래 인식 성공. 동일한 행 레이아웃에 색으로만 구분 */}
+      {/* Expandable panel — failures (ignored) first, recognized successes below. Same row layout, distinguished by color only */}
       {resultOpen && (rows.length > 0 || ignoredCount > 0) && (
         <div className="rounded-lg border border-border bg-surface max-h-56 overflow-y-auto">
           <table className="w-full text-[12px]">
@@ -365,7 +365,7 @@ export default function RecipientInput({
         <div className="text-[11px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{importErr}</div>
       )}
 
-      {/* CSV 업로드 결과 — 에러(막힘) 또는 미리보기+확인 */}
+      {/* CSV upload result — error (blocked) or preview + confirm */}
       {csvResult && !csvResult.ok && (
         <div className="rounded-lg border border-red-500/40 bg-red-500/[0.06] p-3 space-y-2">
           <div className="text-[12px] text-red-500 font-medium">❌ {csvResult.error}</div>
@@ -397,7 +397,7 @@ export default function RecipientInput({
             </div>
           )}
 
-          {/* 결과 미리보기 */}
+          {/* Result preview */}
           <div className="rounded border border-border bg-surface2/30 max-h-32 overflow-y-auto">
             <table className="w-full text-[11.5px]">
               <tbody>

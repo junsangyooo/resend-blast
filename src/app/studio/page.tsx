@@ -1,9 +1,9 @@
 "use client";
-// AI 스튜디오 — 왼쪽 [AI 채팅 | 코드], 오른쪽 미리보기(= 편집기) 고정.
-//  · 미리보기: 글자 클릭 → 바로 수정, 링크·이미지 클릭 → 아래 입력 줄에서 변경.
-//  · 코드: HTML 이메일은 편집 가능(미리보기와 실시간 양방향), 블록 이메일은 읽기 전용(+ HTML로 전환).
-//  · 미리보기에서 요소 클릭 시 코드의 해당 위치로 이동·하이라이트.
-//  · 되돌리기: 손 수정은 블록/글 단위로 묶고, AI 변경은 한 덩어리 (lib/studio-history).
+// AI Studio — left: [AI chat | code], right: fixed preview (= editor).
+//  · Preview: click text → edit in place; click a link/image → change it in the input row below.
+//  · Code: HTML emails are editable (live two-way with the preview); block emails are read-only (+ convert to HTML).
+//  · Clicking an element in the preview jumps to and highlights its location in the code.
+//  · Undo: manual edits are grouped per block/text, AI changes as one chunk (lib/studio-history).
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { sanitizeInline, type TemplateSpec } from "@/lib/blocks";
@@ -479,7 +479,7 @@ function Studio() {
       )}
 
 
-      {/* 같은 한 줄: 목록 표시 이름 · 메일 제목 · 프리헤더 (+ 블록 이메일: 로고 · 푸터) */}
+      {/* Same row: list display name · mail subject · preheader (+ block emails: logo · footer) */}
       <div className="border-b border-border px-4 py-2 flex items-center gap-2 bg-surface2/30">
         <input className="input text-[13px] py-1.5 w-56 shrink-0" value={title} title="목록 표시 이름"
           placeholder="목록 표시 이름 (비우면 제목)" onChange={(e) => { setDirty(true); setTitle(e.target.value); }} />
@@ -516,7 +516,7 @@ function Studio() {
       </div>
 
       <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "minmax(340px, 440px) minmax(0, 1fr)" }}>
-        {/* 왼쪽: AI 채팅 | 코드 */}
+        {/* Left: AI chat | code */}
         <section className="border-r border-border min-h-0 flex flex-col">
           <div className="flex gap-1 px-3 pt-2.5 border-b border-border shrink-0">
             {(["chat", "code"] as const).map((t) => (
@@ -561,7 +561,7 @@ function Studio() {
           )}
         </section>
 
-        {/* 오른쪽: 미리보기 = 편집기 */}
+        {/* Right: preview = editor */}
         <section className="min-h-0 flex flex-col p-3 gap-2">
           <div className="flex items-center gap-2 text-[12px] text-muted shrink-0">
             {aiBusy ? (

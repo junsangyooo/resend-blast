@@ -13,10 +13,10 @@ function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
 type ScheduleUse = { id: string; scheduledAt: string; templateTitle?: string; templateName: string; canManage: boolean };
 
 /**
- * 리스트 생성/편집 모달.
- * 권한: 만든 사람·관리자는 전부 수정, 그 외 사람은 멤버 '추가'만 (기존 멤버는 읽기 전용).
- * 이 리스트를 쓰는 예약 발송이 있으면 저장 전에 취소/유지/예약도 갱신 중 하나를 고르게 한다. ListSelectDialog(행별 수정)와 SendForm(리스트 만들기) 양쪽에서 재사용.
- * 멤버 입력은 RecipientInput(그리드 붙여넣기 + CSV) 으로 통일.
+ * List create/edit modal.
+ * Permissions: the creator and admins can edit everything; everyone else can only 'add' members (existing members are read-only).
+ * If scheduled sends use this list, make the user choose cancel / keep / update the schedule too before saving. Reused by both ListSelectDialog (per-row edit) and SendForm (create list).
+ * Member input is unified on RecipientInput (grid paste + CSV).
  */
 export default function ListEditor({
   slug,
@@ -81,7 +81,7 @@ export default function ListEditor({
   const finalMembers = useMemo(() => mergeMembers(members, pendingRows), [members, pendingRows]);
   const pendingExtra = finalMembers.length - members.length;
 
-  // 회사/직함 열은 CSV 임포트로 값이 있는 멤버가 하나라도 있을 때만 표시(대부분은 없는 필드라 기본은 숨김).
+  // Show the company/title columns only when at least one member has a value from a CSV import (most lists lack these fields, so hidden by default).
   const hasCompanyCol = useMemo(() => members.some((m) => m.company?.trim()), [members]);
   const hasTitleCol = useMemo(() => members.some((m) => m.title?.trim()), [members]);
 

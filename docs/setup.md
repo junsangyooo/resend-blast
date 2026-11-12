@@ -49,7 +49,7 @@ Edit `brand.config.ts` — company name, domains, design tokens, senders, and `a
 | `SENDER_POSTAL_ADDRESS` | external sends | ⚠️ legal requirement (physical address) |
 | `SENDER_ORG_NAME` / `SENDER_CONTACT_EMAIL` | optional | Compliance footer overrides |
 | `RESEND_WEBHOOK_SECRET` | optional | Persist open/click/bounce ([`resend.md`](resend.md)) |
-| `ANTHROPIC_API_KEY` | optional, reserved | For the **planned** AI Studio feature (not implemented yet — see `AGENTS.md` → "AI Studio (planned)"). Safe to leave blank. |
+| `ANTHROPIC_API_KEY` | optional | AI Studio. Usually easier to register in **Settings → AI** instead (see step 5). |
 
 **Google OAuth** (google mode only): in the [Google Cloud Console](https://console.cloud.google.com),
 create an OAuth web client and add these Authorized redirect URIs:
@@ -61,7 +61,17 @@ Default is `local` storage + `attach` delivery — images are embedded in emails
 setup**. For high-volume/CDN delivery, switch to `hosted` + object storage.
 → **[`images.md`](images.md)**.
 
-### 5. Run & verify
+### 5. AI Studio (optional)
+AI Studio drafts emails with Claude. Credentials are tried in this order:
+1. **Settings → AI** (admin): paste a Claude API key (`sk-ant-…`) → **저장** → **연결 확인**.
+   Stored in `data/ai-settings.json` (0600); the UI only ever shows the last 4 characters.
+2. `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN`) in `.env.local`.
+3. The server's Claude CLI login (`claude` → log in on the host).
+
+With none of these, the studio shows a "register a key" message; everything else works without AI.
+The model is `ai.model` in `brand.config.ts`.
+
+### 6. Run & verify
 ```bash
 npm run dev      # http://localhost:3001 — login screen confirms auth is set up
 npm test         # vitest
@@ -69,12 +79,14 @@ npm run build    # production build
 ```
 Create a list → create an email → send a test to yourself.
 
-### 6. Deploy
+### 7. Deploy
 Standard Next.js app — deploy to any Node host behind a reverse proxy (Caddy/Nginx for automatic
 HTTPS), or a container/PaaS.
 
 1. Place `.env.local` and `brand.config.ts` on the server (both gitignored — transfer separately).
-2. `npm run build && npm start`.
+2. `npm run build && npm start` — run it as one long-lived process (systemd, pm2, a container…). Scheduled
+   sends run inside this process: **a schedule whose time passes while the app is down is not sent**
+   (marked "미실행"); future schedules resume after a restart. Avoid restarts around scheduled times.
 3. Point your domain to the server (DNS A record) and issue HTTPS.
 4. Google mode: add the deploy domain to the OAuth redirect URIs.
 5. Complete domain verification in Resend ([`resend.md`](resend.md)).
@@ -88,4 +100,5 @@ See [`production.md`](production.md) for security and pre-deploy hardening.
 - [ ] Resend API key + **domain verified** ([`resend.md`](resend.md))
 - [ ] `auth.mode` → `ACCESS_PASSWORD` (password) or `GOOGLE_CLIENT_*` (google)
 - [ ] `SENDER_POSTAL_ADDRESS` (external sends)
+- [ ] (optional) Claude key in Settings → AI → **연결 확인**
 - [ ] `npm test` → `npm run build` → deploy

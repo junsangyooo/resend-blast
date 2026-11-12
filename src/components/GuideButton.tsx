@@ -3,10 +3,10 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 
-// 가이드 본문(텍스트 + 34장 참조)은 열 때만 받아온다.
+// The guide body (text + 34 image references) is fetched only when opened.
 const GuideDialog = dynamic(() => import("./GuideDialog"), { ssr: false });
 
-/** 탑바의 (!) 버튼 — 누르면 사용 가이드 모달이 열린다. */
+/** The (!) button in the top bar — opens the user guide modal. */
 export default function GuideButton() {
   const [open, setOpen] = useState(false);
 

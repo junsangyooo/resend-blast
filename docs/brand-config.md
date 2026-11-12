@@ -127,7 +127,14 @@ assets: {
 
 ---
 
-## 7. UI text & templates
+## 7. Scheduled sends & AI — `schedule`, `ai`
+
+```ts
+schedule: { timeZoneLabel: "KST", utcOffsetMinutes: 540 }, // one fixed zone for entering/showing schedule times (no DST)
+ai:       { model: "claude-haiku-4-5" },                   // AI Studio model; credentials: Settings → AI or .env.local
+```
+
+## 8. UI text & templates
 
 ```ts
 ui:        { headerBrand, footerWordmark, login: { … } }, // app console copy + login screen strings

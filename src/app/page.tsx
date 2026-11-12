@@ -9,9 +9,9 @@ import type { FollowupPayload } from "@/components/TrackingSidebar";
 import { brand } from "@/brand.config";
 
 /**
- * 메인 — 탑바(브랜드 + 프로필 메뉴) 아래에 발송 화면(SendForm)이 전부.
- * 구 좌측 레일의 진입점들은 발송 화면 팝업(이메일/리스트)과
- * 프로필 메뉴(설정·테마·로그아웃)로 이동했고, 발송 로그는 설정 안의 탭이다.
+ * Main — below the top bar (brand + profile menu) is just the send screen (SendForm).
+ * The old left rail's entry points moved to the send-screen popups (email/list) and
+ * the profile menu (settings/theme/logout); the send log is a tab inside settings.
  */
 export default function HomePage() {
   const [adminOpen, setAdminOpen] = useState(false);

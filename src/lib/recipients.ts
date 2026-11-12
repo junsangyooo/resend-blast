@@ -2,7 +2,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type Recipient = { email: string; name?: string; company?: string; title?: string };
 
-/** {email, name?, company?, title?} 배열을 dedupe (email 기준, lowercase). 첫 항목 보존. */
+/** Dedupe an array of {email, name?, company?, title?} (by email, lowercase). Keeps the first entry. */
 export function dedupeRecipients(items: Recipient[]): Recipient[] {
   const seen = new Map<string, Recipient>();
   for (const it of items) {
@@ -23,21 +23,21 @@ export function isValidEmail(s: string): boolean {
   return EMAIL_RE.test(String(s ?? "").toLowerCase().trim());
 }
 
-// ── 그리드 붙여넣기 파서 (이름+이메일 매핑) ───────────────────────────────────
+// ── Grid paste parser (name + email mapping) ───────────────────────────────────
 export type GridParseResult = {
-  /** 유효한 수신자 (이메일 기준 dedupe, 첫 이름 보존). */
+  /** Valid recipients (deduped by email, first name kept). */
   rows: Recipient[];
-  /** 이메일을 못 찾았거나 형식오류라 버린 줄. */
+  /** Lines dropped because no email was found or the format was invalid. */
   ignored: { line: string; reason: string }[];
-  /** 중복으로 제거된 이메일(lowercase). */
+  /** Emails removed as duplicates (lowercase). */
   duplicates: string[];
 };
 
-/** 한 셀에서 이메일/이름 추출. "홍길동 <a@b.com>" / "a@b.com" / "<a@b.com>" 지원. */
+/** Extract email/name from one cell. Supports "홍길동 <a@b.com>" / "a@b.com" / "<a@b.com>". */
 function cellToEmail(cell: string): { email: string | null; name: string | null } {
   const c = cell.trim();
   if (!c) return { email: null, name: null };
-  // "이름 <addr>" 또는 "<addr>"
+  // "name <addr>" or "<addr>"
   const m = c.match(/^(.*?)<\s*([^<>]+?)\s*>$/);
   if (m) {
     const addr = m[2].replace(/^mailto:/i, "").trim().toLowerCase();
@@ -48,11 +48,11 @@ function cellToEmail(cell: string): { email: string | null; name: string | null 
   return { email: null, name: null };
 }
 
-/** 한 줄을 셀 배열로 분리. 탭 > 파이프 > 쉼표 우선, 없으면 공백 폴백.
- *  (탭·파이프·쉼표가 있으면 이름의 공백을 보존하기 위해 공백으로 자르지 않는다.) */
+/** Split one line into an array of cells. Priority tab > pipe > comma, falling back to whitespace.
+ *  (If tabs/pipes/commas are present, do not split on whitespace so spaces inside names are preserved.) */
 function splitCells(line: string): string[] {
   let s = line.trim();
-  // 마크다운 표: 양끝 파이프 제거
+  // Markdown table: strip the pipes at both ends
   if (s.startsWith("|")) s = s.slice(1);
   if (s.endsWith("|")) s = s.slice(0, -1);
   let parts: string[];
@@ -63,22 +63,22 @@ function splitCells(line: string): string[] {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-/** 마크다운 표 구분줄(`|---|:--:|`)인지. */
+/** Whether this is a Markdown table separator row (`|---|:--:|`). */
 function isSeparatorRow(line: string): boolean {
   const s = line.trim();
   if (!s.includes("-")) return false;
   return /^\|?[\s:|-]+\|?$/.test(s) && s.replace(/[^-]/g, "").length > 0;
 }
 
-/** 헤더 키워드만 든 줄인지 (이메일 없음 + name/email 류 단어). */
+/** Whether the line contains only header keywords (no email + name/email-style words). */
 function isHeaderRow(cells: string[]): boolean {
   const kw = new Set(["email", "e-mail", "mail", "이메일", "name", "이름", "성명"]);
   return cells.length > 0 && cells.every((c) => kw.has(c.toLowerCase()));
 }
 
 /**
- * 엑셀·구글시트·노션표·마크다운표·CSV 어디서 복사해도 이름+이메일을 매핑한다.
- * "형식을 맞추지 말고 이메일 모양으로 잡는다" — 각 줄에서 이메일 칸을 찾고 나머지를 이름으로.
+ * Maps name + email whether copied from Excel, Google Sheets, a Notion table, a Markdown table, or CSV.
+ * "Don't enforce a format; detect by email shape" — find the email cell on each line and treat the rest as the name.
  */
 export function parseRecipientGrid(raw: string): GridParseResult {
   const ignored: GridParseResult["ignored"] = [];
@@ -109,13 +109,13 @@ export function parseRecipientGrid(raw: string): GridParseResult {
       const name = (emails[0].angleName ?? others.join(" ").trim()) || undefined;
       collected.push({ email: emails[0].email, name });
     } else {
-      // 한 줄에 이메일이 여러 개면 각각 한 행으로 (나머지 셀이 누구 이름인지 모호하므로
-      // angle-name 만 부착, 나머지는 이름 없이). 둘째 이후 주소가 사라지지 않게 한다.
+      // If a line has several emails, make each its own row (the remaining cells are ambiguous about whose name they are,
+      // so attach only the angle-name and leave the rest nameless). Keeps the second and later addresses from vanishing.
       for (const e of emails) collected.push({ email: e.email, name: e.angleName ?? undefined });
     }
   }
 
-  // dedupe (첫 이름 보존) + 중복 목록
+  // dedupe (keep first name) + duplicate list
   const seen = new Set<string>();
   const rows: Recipient[] = [];
   const duplicates: string[] = [];
@@ -128,9 +128,9 @@ export function parseRecipientGrid(raw: string): GridParseResult {
 }
 
 /**
- * 자유텍스트에서 특정 이메일이 든 첫 줄을 찾아 그 사람의 이름만 교체한 텍스트를 반환.
- * (textarea 가 source of truth 이므로, 미리보기에서 이름을 고치면 텍스트 자체를 고쳐야
- *  서버 재파싱에도 반영된다.) 한 줄에 이메일이 여러 개면 한 명당 한 줄로 풀어쓴다.
+ * Find the first line containing a given email in free text and return the text with only that person's name replaced.
+ * (The textarea is the source of truth, so a name fixed in the preview must be fixed in the text itself
+ *  to survive server re-parsing.) If a line has several emails, expand it to one line per person.
  */
 export function setNameInText(raw: string, email: string, name: string): string {
   const target = email.toLowerCase().trim();

@@ -4,7 +4,7 @@ import GuideBody from "./GuideBody";
 import { GUIDE_UPDATED_AT } from "@/lib/guide-content";
 import { useEscClose } from "./hooks";
 
-/** 사용 가이드 모달 — 최대 960px, 높이 80vh. */
+/** User guide modal — max 960px wide, 80vh tall. */
 export default function GuideDialog({ onClose }: { onClose: () => void }) {
   useEscClose(true, onClose);
 

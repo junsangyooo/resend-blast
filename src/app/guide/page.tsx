@@ -5,7 +5,7 @@ import { brand } from "@/brand.config";
 
 export const metadata = { title: `사용 가이드 · ${brand.identity.appName}` };
 
-/** 가이드 전체 페이지 — 모달과 같은 내용. 화면을 나란히 놓고 따라할 때 쓴다. */
+/** Full guide page — same content as the modal. For following along with screens side by side. */
 export default function GuidePage() {
   return (
     <div className="h-dvh flex flex-col bg-bg">

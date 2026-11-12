@@ -19,10 +19,10 @@ export type SettingsTab = "history" | "schedules" | "suppression" | "senders" | 
 type Tab = SettingsTab;
 
 /**
- * 설정 — 발송 이력(기본 탭, 전원) + 예약 발송(전원) + 수신거부/반송(전원)
- *        + 발신자 관리(관리자) + 관리자 관리(관리자).
- * 발신자/관리자 탭은 비관리자에게 자물쇠로 표시되고 선택 불가.
- * 서버가 권한을 강제하므로 여기 UI 는 편의 제공.
+ * Settings — send history (default tab, everyone) + scheduled sends (everyone) + unsubscribes/bounces (everyone)
+ *        + sender management (admins) + admin management (admins).
+ * The sender/admin tabs show a lock for non-admins and cannot be selected.
+ * The server enforces permissions, so this UI is only a convenience.
  */
 export default function AdminSettings({
   open, initialTab = "history", isAdmin = false, onClose, onChanged, onFollowup, onSchedulesChanged,
@@ -47,7 +47,7 @@ export default function AdminSettings({
   const [newAdmin, setNewAdmin] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [lockPopup, setLockPopup] = useState<string | null>(null); // 잠긴 탭 클릭 시 잠깐 뜨는 팝업
+  const [lockPopup, setLockPopup] = useState<string | null>(null); // popup shown briefly when a locked tab is clicked
   const [suppEmail, setSuppEmail] = useState("");
   const [suppNote, setSuppNote] = useState("");
 
@@ -220,7 +220,7 @@ export default function AdminSettings({
         {err && <div className="mx-5 mt-3 text-[12px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{err}</div>}
 
         {tab === "history" ? (
-          // 발송 이력은 TrackingSidebar 가 자체 스크롤/폴링을 관리 — 패딩 래퍼 없이 채운다.
+          // TrackingSidebar manages its own scrolling/polling for send history — fill without a padding wrapper.
           <div className="flex-1 min-h-0">
             <TrackingSidebar active={open} reloadKey={0} onFollowup={onFollowup} />
           </div>

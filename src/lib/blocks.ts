@@ -125,7 +125,7 @@ export type TemplateSpec = {
     inquiryEmail?: string;
     /** Whether to show the inquiry email line (default true). If false, omit "문의: …" from the footer. */
     showInquiry?: boolean;
-    /** 회사명(전송자 명칭) 표시 여부 (기본 true). 문의·주소까지 모두 끄면 해당 줄 자체가 사라짐. */
+    /** Whether to show the company (sender) name (default true). If inquiry and address are also off, the line disappears entirely. */
     showOrgName?: boolean;
     showSocial?: boolean;
     showUnsubscribe?: boolean;
@@ -174,8 +174,8 @@ function pickBrandColor(tag: string): string {
   const hex = m[1].toLowerCase();
   return BRAND_HEX.has(hex) ? hex : "";
 }
-/** sanitizeInline 전용 escaper — 이미 escape 된 entity 는 보존해 재적용(idempotent)을 보장.
- *  전역 esc() 는 그대로 둔다: subject/제목 등 평문 필드는 리터럴 escape 시맨틱 유지. */
+/** Escaper for sanitizeInline only: keeps already-escaped entities so re-applying is idempotent.
+ *  The global esc() is left as is: plain-text fields such as subject/title keep literal escape semantics. */
 function escKeepEntities(s: string): string {
   return s
     .replace(/&(?!(?:amp|lt|gt|quot|#39|#\d{1,7}|#x[0-9a-fA-F]{1,6});)/g, "&amp;")
@@ -184,14 +184,14 @@ function escKeepEntities(s: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
-/** text.html 의 인라인 서식을 화이트리스트(굵게/기울임/줄바꿈/브랜드색 span)로 정규화. idempotent. */
+/** Normalize inline formatting in text.html to a whitelist (bold/italic/line break/brand-color span). Idempotent. */
 export function sanitizeInline(html: string): string {
   let out = "";
   let last = 0;
   const tagRe = /<\/?[a-zA-Z][^>]*>/g;
   let m: RegExpExecArray | null;
   while ((m = tagRe.exec(html))) {
-    // 태그 이전 텍스트는 escape (entity 보존 — 재적용해도 이중 escape 안 됨)
+    // Escape the text before the tag (entities preserved, so re-applying never double-escapes)
     out += escKeepEntities(html.slice(last, m.index));
     last = m.index + m[0].length;
     const tag = m[0];
@@ -207,7 +207,7 @@ export function sanitizeInline(html: string): string {
     else if (/^<br\/?>$/.test(lower)) out += "<br>";
     else if (/^<a\b/.test(tag.toLowerCase())) {
       const hm = tag.match(/href\s*=\s*["']?([^"'\s>]+)/i);
-      // href 는 attribute 컨텍스트라 이전 pass 에서 &amp; 로 escape 되어 있을 수 있음 — 되돌린 뒤 재escape (idempotent)
+      // href is an attribute context, so an earlier pass may have escaped it as &amp; — unescape, then re-escape (idempotent)
       const href = hm ? url(hm[1].replace(/&amp;/g, "&")) : "#";
       out += `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:${TEAL}; text-decoration:underline;">`;
     } else if (lower === "</a>") out += "</a>";
@@ -260,9 +260,9 @@ export function resolveStyle(b: Block, idx: number): Resolved {
   return { align, size, weight, color, font };
 }
 
-// ── 에디터 주석(미리보기 전용) ──
-// renderTemplate(spec, { annotate: true }) 일 때만 data-eb-* 속성을 붙여, 스튜디오 미리보기에서
-// "이 글자 = 어느 블록의 어느 필드"를 알 수 있게 한다. 저장·발송 HTML 에는 절대 붙지 않는다.
+// ── Editor annotations (preview only) ──
+// data-eb-* attributes are added only when renderTemplate(spec, { annotate: true }), so the studio preview
+// can tell "this text = which field of which block". They are never added to saved/sent HTML.
 let ANNOTATE = false;
 /** Editable field: data-eb-f="<blockId>:<path>", kind rich (inline HTML) or plain (text). */
 function fa(b: { id: string }, path: string, rich = false): string {
@@ -282,7 +282,7 @@ function ia(b: { id: string }, path: string): string {
   return ANNOTATE ? ` data-eb-i="${b.id}:${path}"` : "";
 }
 
-// ── 코멘트(부제) 작은 회색 줄 ──
+// ── Comment (subtitle): small gray line ──
 function noteHtml(text: string | undefined, align: Align, margin: string, attr = ""): string {
   if (text === undefined) return "";
   return `<p${attr} style="text-align:${align}; color:${MUTED}; font-size:12.5px; line-height:1.6; margin:${margin};">${nl2br(text)}</p>`;
@@ -392,7 +392,7 @@ function dividerHtml(): string {
   return `<div style="border-top:1px solid ${HAIR}; height:1px; line-height:1px;">&nbsp;</div>`;
 }
 
-// ── grid 블록 ──
+// ── grid block ──
 function gridCardHtml(b: Block, c: GridCard, align: Align, ci: number): string {
   const P = `cards.${ci}`;
   const descF = c.descHtml !== undefined ? fa(b, `${P}.descHtml`, true) : fa(b, `${P}.desc`);
@@ -435,7 +435,7 @@ function renderGrid(b: Block): string {
   const cols = b.cols === 3 ? 3 : 2;
   const align: Align = b.cardAlign ?? (b.cardType === "stat" ? "center" : b.cardType === "cta" ? "center" : "left");
   const wPct = cols === 3 ? "33.33%" : "50%";
-  // 반응형: 작은 화면에서 1열 stack (지원 클라이언트). 미지원 시 셀 비율 유지.
+  // Responsive: stack into 1 column on small screens (supporting clients). Otherwise keep cell ratios.
   const cells = cards.map((c, ci) =>
     `<td class="eb-col" width="${wPct}" style="width:${wPct}; vertical-align:top; padding:7px;">${gridCardHtml(b, c, align, ci)}</td>`
   );
@@ -541,7 +541,7 @@ export function specWidthPx(spec: Pick<TemplateSpec, "width">): number {
   return spec.width === "wide" ? 680 : 600;
 }
 
-/** spec → <body> 안에 들어갈 본문 HTML. annotate=true 는 스튜디오 미리보기 전용 (data-eb-* 속성 추가). */
+/** spec → body HTML that goes inside <body>. annotate=true is for the studio preview only (adds data-eb-* attributes). */
 export function renderTemplate(spec: TemplateSpec, opts: { annotate?: boolean } = {}): string {
   ANNOTATE = !!opts.annotate;
   try {

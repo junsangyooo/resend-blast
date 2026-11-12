@@ -13,7 +13,7 @@ All tests pass via `npm test`, and the project builds cleanly with `npm run buil
 - **Stored-XSS protection**: HTML-serving routes (e.g. `/api/templates?preview=`) set `Content-Security-Policy: sandbox` + `X-Content-Type-Options: nosniff`, so even when opened in a new tab or downloaded, scripts cannot execute. (`app/api/templates/route.ts`)
 - **Global security headers**: `next.config.js` sets nosniff, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy`, HSTS, and `Permissions-Policy`.
 - **Ownership permission model**: editing/deleting lists and templates is restricted to **the creator or an admin (`ADMIN_EMAILS`)**. Legacy records with no recorded creator are left unlocked. (`canManage` in `lib/config.ts`, plus `lib/lists.ts`, `lib/templates.ts`, and each route.)
-- **Authenticated import route**: list import verifies the actor, checks ownership, and caps imports at 50,000 members. (`app/api/lists/[slug]/import/route.ts`)
+- **List edits**: full edits (rename, remove members, delete) are owner/admin only; anyone may append members (`app/api/lists/[slug]/members`). Member files are parsed in the browser.
 - **Send abuse limits**: per-send recipient cap (`MAX_RECIPIENTS_PER_SEND`, default 1000), per-user hourly and daily send limits, and a **global send throttle** (concurrent sends stay under the Resend rate limit), with a minimum gap between sends. (`app/api/send/route.ts`, `lib/send-guards.ts`, `lib/config.ts`)
 - **Idempotency**: an identical send (same sender + subject + recipient set) within a short window is rejected, preventing accidental double-sends. (`lib/send-guards.ts`)
 - **Input size guards**: template blocks ≤ 100, imports ≤ 50,000 rows.
@@ -37,7 +37,8 @@ All tests pass via `npm test`, and the project builds cleanly with `npm run buil
 
 - **Multiple senders**: built-in plus custom senders in `data/from.json` (added by an admin via UI/API). The send screen offers sender selection plus a **Reply-To** input. (`lib/senders.ts`, `app/api/from/route.ts`, `app/api/config/route.ts`, `components/SendForm.tsx`)
 - **Personalization**: `{{name}}` / `{{email}}` tokens in the body are substituted per recipient (values are also HTML-escaped). (`lib/blocks.ts`)
-- **Footer options**: social icons on/off, editable sender name and address. (`components/TemplateComposer.tsx`)
+- **Footer options**: social icons, company name, inquiry and unsubscribe lines on/off, inquiry address. (`components/studio/FooterBar.tsx`)
+- **AI Studio credentials**: Settings → AI key (write-only, `data/ai-settings.json` 0600) → `.env.local` key → server Claude CLI login. (`lib/ai/auth.ts`)
 
 ### Operations / reliability
 
@@ -46,6 +47,7 @@ All tests pass via `npm test`, and the project builds cleanly with `npm run buil
 - **Confirmation modal**: real rendered preview (iframe) + large-audience warning + ad-label/Reply-To summary.
 - **Health check**: `/api/health` (public); the deploy script verifies a 200 after deploy.
 - **Concurrency**: registry writes are atomic + locked. Stale-send cleanup cutoff scales with recipient count.
+- **Scheduled sends**: run in-process every 15 s (`lib/scheduler.ts`, started by `instrumentation.ts`, which needs `experimental.instrumentationHook`). Content/recipients are frozen at scheduling time; sender, suppression and limits are re-checked at run time. **If the app is down at the scheduled time, the schedule is not run** (`missed`, shown with a red dot) — keep the process up and check upcoming schedules before restarts.
 - **Pinned Node**: `.nvmrc` + `package.json` engines.
 
 ---
@@ -81,7 +83,7 @@ Set these in your secrets store and deploy them as `.env.local` (or your platfor
 ### 2-3. Operations infrastructure
 
 1. **External monitoring**: watch `https://<your-domain>/api/health` with an uptime monitor (e.g. UptimeRobot, healthchecks.io) and alert on downtime.
-2. **Data backup**: the `data/` directory (lists, sends, suppression, senders, admins, logos) is the operational source of truth. Back it up regularly to a separate machine or object store — e.g. a scheduled `rsync`/snapshot to another host, or periodic commit+push of `data/` to a private repo. The application guards against in-deploy data-loss races, but disk failure requires an independent backup.
+2. **Data backup**: `data/` (lists, sends, suppression, senders, admins, logos, AI key) and `templates/` (emails) are the operational source of truth and are **not tracked by git** (they contain recipient addresses). Back them up regularly to a separate machine or object store — e.g. a scheduled `rsync`/snapshot to another host. Disk failure requires an independent backup.
 
 ### 2-4. Legal / consent (external sends)
 

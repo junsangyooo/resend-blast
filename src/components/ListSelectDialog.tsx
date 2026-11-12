@@ -13,10 +13,10 @@ export type ListRow = {
 };
 
 /**
- * 리스트 선택 팝업 — 체크박스 다중 선택 + 행별 수정/삭제 (별도 관리 화면 대체).
- * 여러 리스트 선택 시 이메일 기준 중복 제거되며, 같은 주소가 여러 리스트에 있으면
- * 먼저 선택한 리스트의 이름이 우선 적용된다 (행의 순번 배지 = 우선순위).
- * '제외'로 지정한 리스트의 멤버는 다른 리스트·직접 입력에 있어도 이번 발송에서 빠진다.
+ * List selection popup — checkbox multi-select + per-row edit/delete (replaces a separate management screen).
+ * When several lists are selected, members are deduped by email; if the same address is in multiple lists,
+ * the name from the list selected first wins (the row's order badge = priority).
+ * Members of a list marked '제외' are dropped from this send even if they appear in other lists or direct input.
  */
 export default function ListSelectDialog({
   open, lists, selected, excluded, dedupedCount, me, isAdmin, onChange, onExcludeChange, onEdit, onCreate, onChanged, onClose,
@@ -27,7 +27,7 @@ export default function ListSelectDialog({
   /** Lists whose members are removed from the send. */
   excluded: string[];
   onExcludeChange: (slugs: string[]) => void;
-  /** 선택된 리스트들의 이메일 기준 중복 제거 후 인원 (부모가 멤버 프리뷰로 계산). */
+  /** Headcount of the selected lists after email dedupe (computed by the parent from the member preview). */
   dedupedCount: number;
   me: string;
   isAdmin: boolean;

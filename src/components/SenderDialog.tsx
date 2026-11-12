@@ -5,8 +5,8 @@ import { useEscClose } from "./hooks";
 export type SenderOption = { value: string; label: string; builtin?: boolean; scope?: "shared" | "personal" };
 
 /**
- * 공용 발신자 선택 팝업. 내장 + 관리자가 등록한 shared 발신자만 노출된다
- * (개인 발신은 발송 화면의 "내 계정으로" 버튼이 담당).
+ * Shared sender picker popup. Only built-in + admin-registered shared senders are shown
+ * (personal sending is handled by the "내 계정으로" button on the send screen).
  */
 export default function SenderDialog({
   open, options, current, onSelect, onClose,

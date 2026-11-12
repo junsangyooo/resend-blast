@@ -16,10 +16,10 @@ export type PickerTemplate = {
 };
 
 /**
- * 이메일 선택 팝업 — 모든 이메일이 항상 노출된다(보관함 개념 없음).
- * 행 클릭 = 선택, 우측 액션 = 스튜디오 편집 / 영구 삭제.
- * 삭제 버튼은 만든 사람·관리자에게만 보이며 서버(deleteTemplate)도 동일하게 강제한다.
- * 복제는 누구나 — 사본은 복제한 사람 소유가 되고 목록 맨 위에 선택된 채로 나타난다.
+ * Email picker popup — all emails are always shown (no archive concept).
+ * Row click = select; right-side actions = studio edit / permanent delete.
+ * The delete button is visible only to the creator and admins, and the server (deleteTemplate) enforces the same.
+ * Anyone can duplicate — the copy is owned by whoever duplicated it and appears selected at the top of the list.
  */
 export default function EmailPickerDialog({
   open, templates, selected, me, isAdmin, onSelect, onEdit, onChanged, onClose,

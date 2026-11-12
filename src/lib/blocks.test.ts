@@ -144,7 +144,7 @@ describe("renderTemplate (flat model)", () => {
   it("footer toggles: orgName + inquiry off drops the whole sender line", () => {
     const off = renderTemplate({ ...base([mk("text", { text: "x" })]), footer: { showOrgName: false, showInquiry: false } });
     expect(off).not.toContain("문의:");
-    // 저작권 줄의 회사명은 남고, 발신 정보 줄만 사라진다.
+    // The company name in the copyright line stays; only the sender-info line disappears.
     expect(off).toContain(`&copy; ${new Date().getFullYear()}`);
     expect(off).not.toMatch(new RegExp(`font-size:11px;[^"]*">\\s*${brand.identity.companyName}`));
   });

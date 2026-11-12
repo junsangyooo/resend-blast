@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Resend webhook 수신. open/click/bounce/complaint 등을 send 레코드에 영속(라이브 상태 30일 유실 대비)하고,
- * bounced/complained 주소는 억제목록에 추가해 다음 발송에서 자동 제외.
- * 서명: Svix 표준(svix-id/svix-timestamp/svix-signature, secret=whsec_...). 미설정 시 비활성(503).
- * 미들웨어 bypass 경로(세션 불필요) — 서명으로 진위 검증.
+ * Receives Resend webhooks. Persists open/click/bounce/complaint etc. into the send record (guards against the 30-day loss of live status),
+ * and adds bounced/complained addresses to the suppression list so they are excluded from the next send automatically.
+ * Signature: Svix standard (svix-id/svix-timestamp/svix-signature, secret=whsec_...). Disabled (503) if not configured.
+ * Middleware-bypass path (no session needed) — authenticity is verified by the signature.
  */
 const EVENT_TO_STATUS: Record<string, string> = {
   "email.sent": "sent",
@@ -69,15 +69,15 @@ export async function POST(req: NextRequest) {
     await applyLiveStatus(emailId, status);
   }
 
-  // 반송/스팸신고 → 억제목록 (다음 발송에서 자동 제외)
+  // bounce/spam complaint → suppression list (excluded automatically from the next send)
   // A bounce explicitly marked transient (mailbox full, temporary failure) is not a reason to block the address forever.
   const bounceType = String(data?.bounce?.type ?? "").toLowerCase();
   const transient = type === "email.bounced" && (bounceType === "transient" || bounceType === "temporary");
   if ((type === "email.bounced" && !transient) || type === "email.complained") {
     const reason = type === "email.bounced" ? "bounced" : "complained";
     const tos: string[] = Array.isArray(data.to) ? data.to : data.to ? [data.to] : [];
-    // Resend 반송 페이로드는 data.to 가 비어있는 경우가 있다 → resendId 로 수신자를 역추적해
-    // 반드시 억제한다(없으면 다음 발송에서 하드바운스 주소로 재발송되어 평판 악화).
+    // Resend bounce payloads sometimes have an empty data.to → trace the recipient back via resendId
+    // and always suppress it (otherwise the next send re-sends to a hard-bounce address and hurts reputation).
     if (tos.length === 0 && emailId) {
       const idx = await buildResendIdIndex();
       const hit = idx.get(emailId);

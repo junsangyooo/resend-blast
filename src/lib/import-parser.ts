@@ -1,10 +1,10 @@
 /**
- * CSV / XLSX 임포트 파서. 클라이언트 사이드에서만 사용 (서버에 명단 안 거치게).
+ * CSV / XLSX import parser. Client-side only (so the roster never passes through the server).
  *
- * 헤더 인식 (대소문자·공백 무관): 아래 동의어 중 하나면 그 열로 본다.
- *  email(필수) · name(권장) · company(선택) · title(선택). 그 외 열은 무시.
- * 여러 시트가 있어도 첫 번째 시트만 읽는다.
- * CSV 인코딩: UTF-8 우선, UTF-8 이 아니면 CP949(EUC-KR, 한국어 Excel 기본)로 읽는다.
+ * Header recognition (case- and whitespace-insensitive): a column matching one of the synonyms below is used.
+ *  email (required) · name (recommended) · company (optional) · title (optional). Other columns are ignored.
+ * Only the first sheet is read, even if there are several.
+ * CSV encoding: UTF-8 first; if it is not UTF-8, read as CP949 (EUC-KR, the Korean Excel default).
  */
 import * as XLSX from "xlsx";
 import { isValidEmail, type Recipient } from "./recipients";
@@ -21,13 +21,13 @@ export type ImportResult =
   | {
       ok: true;
       recipients: Recipient[];
-      /** 헤더 제외 데이터 행 수. */
+      /** Number of data rows, excluding the header. */
       totalRows: number;
-      /** 이메일이 비었거나 형식이 잘못돼 제외된 행 수. */
+      /** Number of rows skipped because the email was empty or malformed. */
       skipped: number;
-      /** 어떤 필드 열을 찾았는지 (email 은 ok:true 면 항상 true). */
+      /** Which field columns were found (email is always true when ok is true). */
       fields: Record<Field, boolean>;
-      /** 읽지 않은 다른 시트 이름(첫 시트만 읽으므로, 있으면 UI 에서 안내). */
+      /** Names of the other sheets that were not read (only the first sheet is read, so the UI shows a notice if any). */
       otherSheetNames: string[];
     }
   | { ok: false; error: string };
@@ -36,7 +36,7 @@ function normalizeHeader(s: string): string {
   return String(s ?? "").replace(/^\uFEFF/, "").trim().toLowerCase().replace(/\s+/g, " ").replace(/[_*]/g, "");
 }
 
-/** 그리드(헤더 행 포함) → ImportResult. */
+/** Grid (including the header row) → ImportResult. */
 export function buildFromGrid(rawGrid: unknown[][], otherSheetNames: string[] = []): ImportResult {
   const grid = rawGrid.map((r) => (r ?? []).map((c) => String(c ?? "").trim()));
   if (grid.length === 0) return { ok: false, error: "파일에서 데이터를 찾지 못했습니다" };
@@ -57,7 +57,7 @@ export function buildFromGrid(rawGrid: unknown[][], otherSheetNames: string[] = 
   let skipped = 0;
   for (let i = 1; i < grid.length; i++) {
     const row = grid[i] ?? [];
-    if (row.every((c) => !c)) continue; // 완전 빈 행은 건너뜀 (오류 집계 안 함)
+    if (row.every((c) => !c)) continue; // skip fully empty rows (not counted as errors)
     const emailRaw = String(row[colIndex.email] ?? "").trim().toLowerCase();
     if (!emailRaw || !isValidEmail(emailRaw)) { skipped++; continue; }
     const rec: Recipient = { email: emailRaw };
@@ -82,7 +82,7 @@ export function buildFromGrid(rawGrid: unknown[][], otherSheetNames: string[] = 
   };
 }
 
-/** 파일 → ImportResult. 첫 번째 시트만 읽는다. */
+/** File → ImportResult. Reads only the first sheet. */
 export async function analyzeImportFile(file: File): Promise<ImportResult> {
   const buf = await file.arrayBuffer();
   const isCsv = /\.(csv|tsv|txt)$/i.test(file.name) || /csv|text\/plain/.test(file.type);

@@ -1,7 +1,7 @@
 /**
- * 수신자 리스트 — 1급 객체.
- * 저장: data/lists/{slug}.json (atomic write, 단일 파일 단위 락)
- * 권한: 조회·멤버 추가는 누구나. 이름·설명 변경, 멤버 삭제·수정, 리스트 삭제는 생성자 또는 관리자만.
+ * Recipient lists are first-class objects.
+ * Storage: data/lists/{slug}.json (atomic write, one lock per file)
+ * Permissions: anyone can view and add members. Renaming, editing the description, removing/editing members and deleting the list are creator- or admin-only.
  */
 import fs from "fs/promises";
 import path from "path";
@@ -40,9 +40,9 @@ export function slugify(s: string): string {
 }
 
 /**
- * 이름(또는 명시적 slug)에서 베이스 슬러그 도출.
- * 순수 한글 등으로 slugify 결과가 비면 fallback(`list-<seed>`)을 생성한다 —
- * 슬러그는 내부 파일명/키일 뿐이고 화면엔 name 이 표시되므로 임의 슬러그로 충분하다.
+ * Derive the base slug from the name (or an explicit slug).
+ * If slugify comes out empty (e.g. a purely Korean name), generate a fallback (`list-<seed>`):
+ * the slug is only an internal file name/key and the UI shows name, so any slug will do.
  */
 export function deriveBaseSlug(name: string, slug?: string, fallbackSeed?: string): string {
   const base = slug ? slugify(slug) : slugify(name);
@@ -169,9 +169,9 @@ export async function deleteList(slug: string, requesterEmail: string): Promise<
 }
 
 /**
- * 여러 리스트의 멤버를 합치면서 각 멤버의 **첫 매칭 리스트 슬러그**를 함께 반환.
- * 한 사람이 A·B 양쪽 멤버여도 처음 매칭된 리스트로 라벨링 (트래킹 사이드바의 출처 표시용).
- * dedupe 도 함께 수행.
+ * Merge the members of several lists and also return each member's **first matching list slug**.
+ * A person in both A and B is labeled with the first list that matched (for the origin shown in the tracking sidebar).
+ * Also dedupes.
  */
 export async function resolveListMembersWithOrigin(
   slugs: string[]

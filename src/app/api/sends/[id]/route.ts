@@ -17,14 +17,14 @@ type ResendEmail = {
 };
 
 /**
- * 단일 send 상세.
- * - ?withStatus=1 : Resend 에 각 resendId 상태를 조회해 머지 + 레코드에 영속(라이브 상태 30일 유실 대비).
- * - ?format=csv   : 수신자별 상태 CSV 다운로드.
- * PATCH { abort: true } : 진행 중 발송 중단 요청.
+ * Single send detail.
+ * - ?withStatus=1 : query Resend for each resendId status, merge, and persist to the record (guards against live status being lost after 30 days).
+ * - ?format=csv   : download per-recipient status as CSV.
+ * PATCH { abort: true } : request to abort an in-progress send.
  */
 const STATUS_CACHE = new Map<string, { at: number; status: string }>();
 const CACHE_TTL_MS = 5_000;
-const FETCH_CONCURRENCY = 6; // Resend rate-limit(초당 ~10) 보호: 동시 조회 상한
+const FETCH_CONCURRENCY = 6; // Protect the Resend rate limit (~10/sec): cap on concurrent lookups
 
 async function fetchStatus(key: string, resendId: string): Promise<string> {
   const c = STATUS_CACHE.get(resendId);
@@ -42,12 +42,12 @@ async function fetchStatus(key: string, resendId: string): Promise<string> {
   } catch {
     s = "unknown";
   }
-  // 성공/실패 모두 캐시(unknown 포함) — 429/에러 시 다음 폴링이 즉시 재폭주하지 않게 한다.
+  // Cache both successes and failures (including unknown) — so the next poll doesn't immediately flood again after a 429/error.
   STATUS_CACHE.set(resendId, { at: Date.now(), status: s });
   return s;
 }
 
-/** 동시성 제한 map — N+1 fetch 가 Resend 를 한꺼번에 때리지 않게 한다. */
+/** Concurrency-limited map — keeps the N+1 fetch from hammering Resend all at once. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const rows = send.recipients.map((r) =>
       [r.email, r.name ?? "", r.listSlug ?? "", r.status, r.liveStatus ?? "", r.error ?? "", r.sentAt ?? ""].map(csvCell).join(",")
     );
-    const csv = "﻿" + [header.join(","), ...rows].join("\n"); // BOM for Excel(한글)
+    const csv = "﻿" + [header.join(","), ...rows].join("\n"); // BOM for Excel (Korean)
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   );
   const statusMap = new Map(results.map((r) => [r.id, r.status]));
 
-  // 라이브 상태를 레코드에 영속(Resend 30일 보존 한계 대비). unknown 은 저장 안 함.
+  // Persist live status to the record (Resend only retains 30 days). unknown is not saved.
   const at = new Date().toISOString();
   const persisted = await updateSend(params.id, (r) => ({
     ...r,
@@ -132,7 +132,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   }
   const body = await req.json().catch(() => ({}));
 
-  // 권한: 발송자 본인 또는 관리자만 (IDOR 방지 — 남의 발송·예약 조작 차단).
+  // Permission: only the sender themselves or an admin (prevents IDOR — blocks tampering with others' sends/schedules).
   const rec = await getSend(params.id);
   if (!rec) return NextResponse.json({ error: "발송 기록 없음" }, { status: 404 });
   if (!(await canManageAsync(rec.sentBy, actor))) {

@@ -76,7 +76,7 @@
     @apply w-7 h-7 inline-flex items-center justify-center rounded-md text-xs text-muted
            hover:bg-surface2 hover:text-text transition disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent;
   }
-  /* ① ② ③ 단계 배지 — 솔리드 틸 */
+  /* ① ② ③ step badges — solid teal */
   .step-badge {
     @apply w-6 h-6 rounded-full bg-brand text-onBrand text-xs font-bold
            inline-flex items-center justify-center shrink-0;
@@ -84,16 +84,16 @@
   .chip {
     @apply inline-flex items-center gap-1 rounded-md bg-surface2 border border-border px-2 py-0.5 text-[11px] text-text/80;
   }
-  /* 헤더 탭 버튼 */
+  /* Header tab buttons */
   .tab-btn {
     @apply inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-muted
            hover:text-text hover:bg-surface2 transition;
   }
-  /* 수신자 숫자 카드 */
+  /* Recipient count card */
   .stat-box {
     @apply rounded-xl border border-border bg-surface px-4 py-3;
   }
-  /* 프리뷰 하단 다크 기술 스트립 */
+  /* Dark technical strip at the bottom of the preview */
   .canvas-strip {
     @apply font-mono text-[10px] tracking-[0.15em] text-white/65 rounded-lg px-3.5 py-2 flex items-center;
     background: #16181d;
@@ -109,11 +109,11 @@
 .rtField:empty::before { content: attr(data-ph); color: #9ca3af; pointer-events: none; }
 .rtField { outline: none; min-height: 1.4em; }
 
-/* ── 인앱 사용 가이드 본문 (lib/guide-content.ts 의 생성 HTML) ──
- * .ui   = 화면의 버튼·메뉴 이름 (키캡 칩)   ← 문서의 **굵게**
- * mark  = 꼭 읽어야 하는 문장 (하이라이트)   ← 문서의 ==표시==
- * h4    = ① ② 소소제목                       ← 굵은 글씨만 있는 문단
- * .step = 번호 단계                           ← **N.** 으로 시작하는 문단
+/* ── In-app usage guide body (generated HTML from lib/guide-content.ts) ──
+ * .ui   = on-screen button/menu name (keycap chip)   ← document's **bold**
+ * mark  = must-read sentence (highlight)             ← document's ==mark==
+ * h4    = ① ② sub-subheading                         ← paragraph containing only bold text
+ * .step = numbered step                              ← paragraph starting with **N.**
  */
 .guide { @apply text-[14px] leading-[1.8] text-text/85; }
 .guide h3 { @apply relative text-[16px] font-bold text-text mt-10 mb-3 pb-2; }

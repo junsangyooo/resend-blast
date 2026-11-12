@@ -1,4 +1,4 @@
-// lib/ai/examples.ts — few-shot 예시 spec — 프리셋(행사 초청 / D-1 리마인더)과 동일 구성. 고정 id.
+// lib/ai/examples.ts — few-shot example specs, same composition as the presets (event invitation / D-1 reminder). Fixed ids.
 import type { TemplateSpec } from "../blocks";
 import { brand } from "../../brand.config";
 
