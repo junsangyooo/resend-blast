@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toAiError, looksLikeApiKey, AI_ERROR } from "./auth";
+import { toAiError, looksLikeApiKey, isOAuthToken, AI_ERROR } from "./auth";
 
 describe("AI auth error mapping", () => {
   it("no key + CLI not logged in → ask to register a key", () => {
@@ -19,5 +19,9 @@ describe("AI auth error mapping", () => {
     expect(looksLikeApiKey("sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345")).toBe(true);
     expect(looksLikeApiKey("re_123")).toBe(false);
     expect(looksLikeApiKey("")).toBe(false);
+  });
+  it("subscription token vs API key", () => {
+    expect(isOAuthToken("sk-ant-oat01-abcdefghijklmnopqrstuvwxyz")).toBe(true);
+    expect(isOAuthToken("sk-ant-api03-abcdefghijklmnopqrstuvwxyz")).toBe(false);
   });
 });

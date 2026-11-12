@@ -140,6 +140,8 @@ Model: `brand.config` `ai.model`.
 - **Credential order** (`lib/ai/auth.ts`): API key registered in **Settings → AI** (stored in
   `data/ai-settings.json`, mode 0600, write-only — the UI only sees the last 4 characters) →
   `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` in `.env.local` → the server's Claude CLI login.
+  A registered value starting with `sk-ant-oat` (Claude subscription token) is passed as `CLAUDE_CODE_OAUTH_TOKEN`,
+  anything else as `ANTHROPIC_API_KEY`.
 - When nothing works the studio shows "AI 사용 불가 · 설정 → AI에서 Claude API 키 등록 필요"; a failing key
   shows "Claude API 키 오류". **연결 확인** in Settings → AI makes one tiny real call.
 - The server is stateless: chat history lives in the browser and is gone when the page is left. One request per user at a time.

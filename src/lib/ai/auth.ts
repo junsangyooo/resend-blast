@@ -37,6 +37,11 @@ export function looksLikeApiKey(k: string): boolean {
   return /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k.trim());
 }
 
+/** Claude subscription (Claude Code) OAuth token rather than a Console API key. */
+export function isOAuthToken(k: string): boolean {
+  return /^sk-ant-oat/.test(k.trim());
+}
+
 export async function saveApiKey(apiKey: string, by: string): Promise<void> {
   await withFileLock(FILE, async () => {
     const data: Stored = { apiKey: apiKey.trim(), updatedAt: new Date().toISOString(), updatedBy: by };
@@ -60,7 +65,16 @@ function envKeyPresent(): boolean {
 export async function resolveAiAuth(): Promise<{ source: AiAuthSource; env: Record<string, string | undefined> }> {
   const stored = await readStored();
   if (stored.apiKey) {
-    return { source: "settings", env: { ...process.env, ANTHROPIC_API_KEY: stored.apiKey, CLAUDE_CODE_OAUTH_TOKEN: undefined } };
+    // A Claude subscription token (sk-ant-oat…) goes to CLAUDE_CODE_OAUTH_TOKEN; a Console API key to ANTHROPIC_API_KEY.
+    const oauth = isOAuthToken(stored.apiKey);
+    return {
+      source: "settings",
+      env: {
+        ...process.env,
+        ANTHROPIC_API_KEY: oauth ? undefined : stored.apiKey,
+        CLAUDE_CODE_OAUTH_TOKEN: oauth ? stored.apiKey : undefined,
+      },
+    };
   }
   if (envKeyPresent()) return { source: "env", env: { ...process.env } };
   // No key: let the CLI use its own login. Make sure an empty variable does not shadow it.
