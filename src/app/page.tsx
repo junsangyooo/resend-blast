@@ -79,8 +79,6 @@ export default function HomePage() {
             aria-hidden
           />
           <span className="font-extrabold tracking-tight text-brand text-[15px]">{brand.ui.headerBrand}</span>
-          <span className="w-px h-4 bg-border shrink-0" aria-hidden />
-          <span className="text-muted text-sm font-medium truncate">{brand.identity.appName}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => openSettings("history")} className="btn-ghost text-[13px] py-1.5">발송 이력</button>

@@ -9,14 +9,14 @@ export function replaceConst(src, name, value) {
 
 export function renderConfig(template, values) {
   const map = {
-    COMPANY: values.company,
+    SENDER_NAME: values.senderName,
     AUTH_MODE: values.mode,
     APP_ACCENT: values.appAccent,
     APP_ACCENT_BRIGHT: values.appAccentBright,
     APP_ACCENT_DEEP: values.appAccentDeep,
   };
   if (values.operatorEmail) map.OPERATOR_EMAIL = values.operatorEmail;
-  if (values.operatorName || values.company) map.OPERATOR_NAME = values.operatorName || values.company;
+  if (values.operatorName) map.OPERATOR_NAME = values.operatorName;
   if (values.loginDomain) map.LOGIN_DOMAIN = values.loginDomain;
   if (values.senderDomain) map.SENDER_DOMAIN = values.senderDomain;
   if (values.legalName) map.LEGAL_NAME = values.legalName;

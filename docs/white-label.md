@@ -56,8 +56,8 @@ Fill these into the project root `.env.local`. Only the names are listed here; p
 Change just the **derived base values** at the top of the file and most things propagate automatically:
 
 ```ts
-const COMPANY = "Acme";                                // → company name in header, login, footer, presets
-const LEGAL_NAME = "Acme Inc.";                        // → compliance footer sender name
+const SENDER_NAME = "Email Blast";                     // → name recipients see: From name, unsubscribe page, logo alt
+const LEGAL_NAME = "Email Blast";                      // → compliance footer sender name
 const LOGIN_DOMAIN = "example.com";                    // → allowed Google Workspace login domain (google mode)
 const SENDER_DOMAIN = "send.example.com";              // → allowed From/Reply-To domain (★key to send blocking)
 const WEBSITE_URL = "https://www.example.com";         // → email footer logo link
@@ -245,7 +245,7 @@ and never collides with upstream updates.
 
 - [ ] `npm run init` — generates `brand.config.ts` + `.env.local`
 - [ ] Fill in all your keys in `.env.local` (section 1)
-- [ ] Replace the base values at the top of `brand.config.ts` (COMPANY, 2 domains, website, ASSET_BASE) and design tokens
+- [ ] Replace the base values at the top of `brand.config.ts` (SENDER_NAME, 2 domains, website, ASSET_BASE) and design tokens
 - [ ] Choose `auth.mode` (`"password"` or `"google"`) and set the matching env/config
 - [ ] Set `senders.builtinFrom` / `replyToDefault` to your sending address
 - [ ] (If `assets.delivery: "hosted"`) upload logos/social icons and update the `email.*` URLs (section 3)

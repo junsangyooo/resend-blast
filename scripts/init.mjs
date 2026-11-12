@@ -288,7 +288,7 @@ async function main() {
   }
 
   const v = {};
-  v.company = await ask("서비스/회사 이름?", "Acme");
+  v.senderName = await ask("받는 사람에게 보일 발신 이름?", "Email Blast");
   const mode = await ask("로그인 방식? (1) 비밀번호  (2) Google", "1");
   v.mode = mode === "2" ? "google" : "password";
 
@@ -300,7 +300,7 @@ async function main() {
       isEmail,
       "이메일 형식이 아닙니다."
     );
-    v.operatorName = v.company;
+    v.operatorName = "Operator";
   } else {
     v.loginDomain = await askValid(
       "Google 로그인 허용 도메인?",
@@ -327,7 +327,7 @@ async function main() {
     );
     v.resendKey = await ask("Resend API 키? (없으면 Enter — 발송 전 도메인 인증 필요)", "");
     v.replyTo = await ask("답장 받을 주소?", "");
-    v.legalName = await ask("법인명(컴플라이언스)?", `${v.company} Inc.`);
+    v.legalName = await ask("법인명(컴플라이언스)?", v.senderName);
     v.postalAddress = await ask("우편주소(CAN-SPAM)?", "");
     v.contactEmail = await ask("문의 이메일?", "");
   }
@@ -339,7 +339,7 @@ async function main() {
 
   console.log("\n--- 요약 ---");
   console.log(
-    `  회사: ${v.company} | 로그인: ${v.mode} | 테마: ${getTheme(themeId).name}` +
+    `  발신 이름: ${v.senderName} | 로그인: ${v.mode} | 테마: ${getTheme(themeId).name}` +
       (v.senderDomain ? ` | 발송: ${v.senderDomain}` : " | 발송: 나중에")
   );
   if (!(await confirm("이대로 작성할까요?", true))) {

@@ -17,8 +17,8 @@
  */
 
 // ── Brand baseline values (change in one place; propagates to copy and senders) ── @init:identity
-const COMPANY      = "Acme";                // @init  company/service display name
-const LEGAL_NAME   = "Acme Inc.";           // @init  legal sender name (compliance footer)
+const SENDER_NAME  = "Email Blast";         // @init  name recipients see (From display name, unsubscribe page, logo alt)
+const LEGAL_NAME   = "Email Blast";         // @init  legal sender name (compliance footer)
 // Domains are fixed as pure constants (client renders → env dependence causes hydration mismatch).
 const LOGIN_DOMAIN  = "example.com";        // @init  Workspace domain allowed for Google login (for google mode)
 const SENDER_DOMAIN = "send.example.com";   // @init  allowed sending (From) domain (★core of send blocking)
@@ -30,7 +30,7 @@ const ASSET_BASE = "https://cdn.example.com/assets";
 // ── Auth & operator identity ────────────────────────────────────────────────
 const AUTH_MODE              = "password";            // @init  ("password" | "google")
 const OPERATOR_EMAIL         = "you@example.com";    // @init  password-mode admin identity
-const OPERATOR_NAME          = "Acme";               // @init  operator display name
+const OPERATOR_NAME          = "Operator";           // @init  operator display name
 const REPLY_TO_DEFAULT       = "inquiry@example.com"; // @init
 const POSTAL_ADDRESS_DEFAULT = "";                   // @init  CAN-SPAM postal address
 const CONTACT_EMAIL_DEFAULT  = "inquiry@example.com"; // @init
@@ -63,10 +63,10 @@ export type BrandLogo = { id: string; label: string; url: string; width: number 
 export const brand = {
   // ── Identity ────────────────────────────────────────────────────────────
   identity: {
-    companyName: COMPANY,
+    companyName: SENDER_NAME, // sender organization as recipients see it (the app itself is "Email Blast")
     legalName: LEGAL_NAME,
     appName: "Email Blast",
-    appTitle: `${COMPANY} Email Blast`,
+    appTitle: "Email Blast",
     appDescription: "Email blast tool",
     websiteUrl: WEBSITE_URL,
     /** App public base URL (used in the send loop, e.g. unsubscribe links). env(APP_BASE_URL) override. */
@@ -94,7 +94,7 @@ export const brand = {
     /** Built-in sender (always present, cannot be deleted). Operator additions live in data/from.json.
      *  ⚠️ At least 1 required (FROM_DEFAULT references [0]). Keep it matching senderDomain. */
     builtinFrom: [
-      { value: `${COMPANY} <hello@${SENDER_DOMAIN}>`, label: COMPANY, builtin: true },
+      { value: `${SENDER_NAME} <hello@${SENDER_DOMAIN}>`, label: SENDER_NAME, builtin: true },
     ] as BrandFromOption[],
     /** Default Reply-To. This value is allowed even outside senderDomain (e.g. gmail) (resolveReplyTo). */
     replyToDefault: REPLY_TO_DEFAULT,
@@ -131,9 +131,9 @@ export const brand = {
     },
     mono: "Menlo,'SF Mono',Consolas,'Liberation Mono',monospace",
     /** Header (top) default logo — used when spec.logo is unset. Replace with your own logo's public URL. */
-    headerLogo: { url: `${ASSET_BASE}/header-logo.png`, alt: COMPANY, width: 130 },
+    headerLogo: { url: `${ASSET_BASE}/header-logo.png`, alt: SENDER_NAME, width: 130 },
     /** Footer (bottom) logo + click link. */
-    footerLogo: { url: `${ASSET_BASE}/footer-logo.png`, alt: COMPANY, link: WEBSITE_URL, width: 100, height: 16 },
+    footerLogo: { url: `${ASSET_BASE}/footer-logo.png`, alt: SENDER_NAME, link: WEBSITE_URL, width: 100, height: 16 },
     /** Footer social icon images. */
     socialIcons: {
       x: `${ASSET_BASE}/x-logo.png`,
@@ -170,12 +170,12 @@ export const brand = {
 
   // ── Header logo registry (built-in list in lib/logos.ts) ──────────────────────
   logos: [
-    { id: "primary", label: COMPANY, url: `${ASSET_BASE}/header-logo.png`, width: 130 },
+    { id: "primary", label: SENDER_NAME, url: `${ASSET_BASE}/header-logo.png`, width: 130 },
   ] as BrandLogo[],
 
   // ── Template defaults ───────────────────────────────────────────────────────
   templates: {
-    defaultSubject: `[알림] ${COMPANY}`,
+    defaultSubject: "[알림]",
   },
 
   // ── Scheduled sends ─────────────────────────────────────────────────────────
@@ -196,17 +196,17 @@ export const brand = {
   // ── App UI ──────────────────────────────────────────────────────────────
   ui: {
     /** Top header wordmark. */
-    headerBrand: COMPANY,
+    headerBrand: "Email Blast",
     /** Wordmark at the bottom of the public unsubscribe/resubscribe page. */
-    footerWordmark: COMPANY,
+    footerWordmark: SENDER_NAME,
     /** App console (web UI) accent color — app/layout.tsx injects it as a :root CSS variable.
      *  Decoupled from email colors: APP_ACCENT* drives the UI; EMAIL_* drives email bodies. */
     appAccent: APP_ACCENT,             // → --brand / --ring
     appAccentDeep: APP_ACCENT_DEEP,    // → --brand-deep
     appAccentBright: APP_ACCENT_BRIGHT,// → --brand-mint (lighter end of the CTA gradient)
     login: {
-      title: `${COMPANY} Email Blast`,
-      subtitle: `${COMPANY} 계정으로 로그인하세요.`,
+      title: "Email Blast",
+      subtitle: "Google 계정으로 로그인하세요.",
       /** Login screen copy for password mode. */
       passwordSubtitle: `접근하려면 비밀번호를 입력하세요.`,
       domainNotice: `@${LOGIN_DOMAIN} 계정만 접근할 수 있습니다.`,

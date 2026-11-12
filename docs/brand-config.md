@@ -21,8 +21,8 @@ brand.config.ts   ← public brand identity, design, auth mode   (safe to expose
 Changing these constants propagates across UI copy, emails, and senders.
 
 ```ts
-const COMPANY      = "Acme";                          // display name (header, titles, footer)
-const LEGAL_NAME   = "Acme Inc.";                     // legal sender name (compliance footer)
+const SENDER_NAME  = "Email Blast";                   // name recipients see (From name, unsubscribe page, logo alt). The app itself is always "Email Blast".
+const LEGAL_NAME   = "Email Blast";                   // legal sender name (compliance footer)
 const LOGIN_DOMAIN = "example.com";                   // allowed Google-login domain (google mode only)
 const SENDER_DOMAIN= "send.example.com";              // allowed sending (From) domain — must match Resend
 const WEBSITE_URL  = "https://www.example.com";       // footer logo link
@@ -58,7 +58,7 @@ One line picks the login method. Both implementations ship in the code.
 auth: {
   mode: "password",                 // "password" | "google"
   operatorEmail: "you@example.com", // password mode: single operator = automatic admin
-  operatorName: "Acme",             // display name for the operator's sender
+  operatorName: "Operator",         // password mode: display name of the single operator
   loginDomain: LOGIN_DOMAIN,        // google mode: allowed Workspace domain
   senderDomain: SENDER_DOMAIN,      // allowed From domain
 }
@@ -76,7 +76,7 @@ auth: {
 ```ts
 senders: {
   builtinFrom: [
-    { value: `${COMPANY} <hello@${SENDER_DOMAIN}>`, label: COMPANY, builtin: true },
+    { value: `${SENDER_NAME} <hello@${SENDER_DOMAIN}>`, label: SENDER_NAME, builtin: true },
   ],
   replyToDefault: "inquiry@example.com", // may be outside senderDomain (e.g. your Gmail)
   orgName:        LEGAL_NAME,            // compliance footer (env SENDER_ORG_NAME overrides)

@@ -21,6 +21,6 @@ describe("validate", () => {
     expect(suggestSenderDomain("garbage")).toBe("");
   });
   it("builtinFrom", () => {
-    expect(builtinFrom("Acme", "send.acme.com")).toBe("Acme <hello@send.acme.com>");
+    expect(builtinFrom("Email Blast", "send.example.com")).toBe("Email Blast <hello@send.example.com>");
   });
 });

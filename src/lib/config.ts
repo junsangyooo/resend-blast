@@ -9,7 +9,7 @@
 import { brand } from "../brand.config";
 
 export type FromOption = {
-  /** The actual RFC 5322 from value (e.g., "Acme <hello@send.example.com>") */
+  /** The actual RFC 5322 from value (e.g., "Email Blast <hello@send.example.com>") */
   value: string;
   /** UI display name */
   label: string;

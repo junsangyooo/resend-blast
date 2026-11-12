@@ -16,6 +16,6 @@ export function suggestSenderDomain(email) {
   return d ? `send.${d}` : "";
 }
 
-export function builtinFrom(company, senderDomain) {
-  return `${company} <hello@${senderDomain}>`;
+export function builtinFrom(senderName, senderDomain) {
+  return `${senderName} <hello@${senderDomain}>`;
 }
