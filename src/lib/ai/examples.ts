@@ -12,7 +12,7 @@ export const EXAMPLE_SPECS: { label: string; spec: TemplateSpec }[] = [
       { id: "ex1", type: "kicker", text: "YOU'RE INVITED" },
       { id: "ex2", type: "heading", text: `${CO} Demo Day`, size: "L" },
       { id: "ex3", type: "badge", line1: "2026. 6. 10 (화) 오후 4시", line2: "라움아트센터, 서울" },
-      { id: "ex4", type: "text", html: `{{name|Roboticist}}님을 ${CO}의 첫 공개 데모데이에 초대합니다.<br>현장에서 라이브 데모와 네트워킹이 준비되어 있습니다.` },
+      { id: "ex4", type: "text", html: `{{name|고객}}님을 ${CO}의 첫 공개 데모데이에 초대합니다.<br>현장에서 라이브 데모와 네트워킹이 준비되어 있습니다.` },
       { id: "ex5", type: "button", label: "참가 신청하기", url: "https://example.com/rsvp", arrow: false },
       { id: "ex6", type: "divider", gap: "lg" },
       { id: "ex7", type: "text", size: "S", color: "muted", align: "center", html: "좌석이 한정되어 있어 선착순으로 마감됩니다." },

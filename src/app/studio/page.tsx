@@ -17,7 +17,7 @@ import ChatPanel from "@/components/studio/ChatPanel";
 import CodePane from "@/components/studio/CodePane";
 import PreviewEditor, { type PreviewEdit, type PreviewHandle, type PreviewTarget } from "@/components/studio/PreviewEditor";
 import GuideButton from "@/components/GuideButton";
-import { formatKst } from "@/lib/kst";
+import { formatKst, ZONE_LABEL } from "@/lib/kst";
 import { EXT_BY_TYPE, MAX_UPLOAD_BYTES } from "@/lib/storage/image-validation";
 
 type Mode = "spec" | "html";
@@ -607,7 +607,7 @@ function Studio() {
               {saveAsk.map((s) => (
                 <li key={s.id} className="flex justify-between gap-3">
                   <span className="truncate">{s.templateTitle ?? s.templateName}</span>
-                  <span className="text-muted shrink-0 tabular-nums">{formatKst(s.scheduledAt)} KST</span>
+                  <span className="text-muted shrink-0 tabular-nums">{formatKst(s.scheduledAt)} {ZONE_LABEL}</span>
                 </li>
               ))}
             </ul>

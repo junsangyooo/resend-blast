@@ -3,6 +3,7 @@
 // change its target/source in the inspector bar below. The iframe is reloaded only when `docKey`
 // changes (AI result, code edit, undo…) — edits made here never reload it, so the caret stays.
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { brand } from "@/brand.config";
 
 export type PreviewEdit =
   | { kind: "field"; blockId: string; path: string; rich: boolean; value: string }
@@ -21,10 +22,10 @@ export type PreviewHandle = {
 const EDITOR_CSS = `
 [data-eb-f], [data-eb-t] { outline: 1px dashed transparent; outline-offset: 2px; border-radius: 2px; }
 [data-eb-f]:hover, [data-eb-t]:hover { outline-color: rgba(15,157,138,.55); cursor: text; }
-[data-eb-f]:focus, [data-eb-t]:focus { outline: 2px solid #0f9d8a; }
+[data-eb-f]:focus, [data-eb-t]:focus { outline: 2px solid ${brand.ui.appAccent}; }
 a, img { cursor: pointer; }
 .eb-sel { outline: 2px solid #f59e0b !important; outline-offset: 2px; }
-.eb-flash { outline: 2px solid #0f9d8a !important; outline-offset: -2px; transition: outline-color 1.2s; }
+.eb-flash { outline: 2px solid ${brand.ui.appAccent} !important; outline-offset: -2px; transition: outline-color 1.2s; }
 `;
 
 type Props = {
@@ -57,7 +58,7 @@ const PreviewEditor = forwardRef<PreviewHandle, Props>(function PreviewEditor(pr
     try { scrollY.current = frame.current?.contentWindow?.scrollY ?? 0; } catch {}
     setSrcDoc(
       `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${EDITOR_CSS}</style></head>` +
-      `<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;-webkit-font-smoothing:antialiased;">${body}</body></html>` +
+      `<body style="margin:0;padding:0;background-color:${brand.email.surfaces.pageBg};font-family:'Pretendard Variable',Pretendard,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Apple SD Gothic Neo','Noto Sans KR',sans-serif;-webkit-font-smoothing:antialiased;">${body}</body></html>` +
       // Unique per reload: an identical srcdoc (e.g. undo back to the loaded content) would not reload the frame,
       // leaving in-place edits on screen.
       `<!--eb-${docKey}-->`,

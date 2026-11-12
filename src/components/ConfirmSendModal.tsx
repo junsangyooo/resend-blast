@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fillPlaceholders, fillSubject, hasBlankNameRisk } from "@/lib/personalize";
 import { ensureUnsubFooter } from "@/lib/unsub-footer";
-import { kstInputToDate, toKstParts, formatKst } from "@/lib/kst";
+import { kstInputToDate, toKstParts, formatKst, ZONE_LABEL } from "@/lib/kst";
 import { useEscClose } from "./hooks";
 import { PRIOR_LABEL } from "@/lib/status-text";
 import KstDateTimeInput, { type KstValue } from "./KstDateTimeInput";
@@ -22,7 +22,7 @@ type PriorKind = "same" | "modified" | "scheduled";
 type PriorHit = { email: string; kind: PriorKind; sendId: string; at: string };
 
 
-/** Default schedule time: one hour from now, rounded up to 10 minutes (KST). */
+/** Default schedule time: one hour from now, rounded up to 10 minutes. */
 function defaultScheduleValue(): KstValue {
   const t = Date.now() + 60 * 60 * 1000;
   const rounded = new Date(Math.ceil(t / (10 * 60 * 1000)) * 10 * 60 * 1000);
@@ -342,7 +342,7 @@ export default function ConfirmSendModal({
           <button onClick={onClose} className="btn-ghost">취소</button>
           <button onClick={onPrimary} disabled={!ready} className="btn-primary">
             {!ready ? "확인 중…" : mode === "schedule"
-              ? `${scheduleAt ? `${formatKst(scheduleAt)} KST에 ` : ""}${effectiveCount}명 예약`
+              ? `${scheduleAt ? `${formatKst(scheduleAt)} ${ZONE_LABEL}에 ` : ""}${effectiveCount}명 예약`
               : `${effectiveCount}명에게 발송`}
           </button>
         </div>

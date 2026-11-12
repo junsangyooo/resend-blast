@@ -1,5 +1,5 @@
 /**
- * In-process scheduler for scheduled sends (single `next start` process on the mini PC).
+ * In-process scheduler for scheduled sends (assumes a single long-running `next start` process).
  *
  * - Started once per process from instrumentation.ts (guarded against HMR double-start).
  * - On start: schedules whose time already passed are marked "missed" — the server was off then,

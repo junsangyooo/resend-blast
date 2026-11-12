@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import KstDateTimeInput, { type KstValue } from "./KstDateTimeInput";
-import { formatKst, relativeFromNow, toKstParts, kstInputToDate } from "@/lib/kst";
+import { formatKst, relativeFromNow, toKstParts, kstInputToDate, ZONE_LABEL } from "@/lib/kst";
 import { SEND_STATUS_LABEL, RECIPIENT_STATUS_LABEL, isIntentionalSkip } from "@/lib/status-text";
 import type { FollowupPayload } from "./TrackingSidebar";
 
@@ -161,7 +161,7 @@ export default function ScheduledSends({ active, onChanged, onFollowup }: {
             <span className={`chip shrink-0 ${meta.cls}`}>{meta.label}</span>
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-semibold tabular-nums">
-                {formatKst(s.scheduledAt)} <span className="text-muted font-normal">KST</span>
+                {formatKst(s.scheduledAt)} <span className="text-muted font-normal">{ZONE_LABEL}</span>
                 {s.status !== "canceled" && <span className="text-[12px] text-muted font-normal"> · {relativeFromNow(s.scheduledAt, now)}</span>}
               </div>
               <div className="text-[13px] text-text/80 truncate" title={s.subject}>{s.templateTitle ?? s.templateName} · {s.subject}</div>
@@ -278,7 +278,7 @@ export default function ScheduledSends({ active, onChanged, onFollowup }: {
   return (
     <div className="h-full overflow-y-auto p-5 space-y-4">
       <div className="text-[12px] text-muted rounded-lg border border-border bg-surface2/40 px-3 py-2">
-        KST 기준 · 예약 시점 내용·명단으로 발송 · 수신거부·발송 한도는 발송 시점 기준 ·{" "}
+        {ZONE_LABEL} 기준 · 예약 시점 내용·명단으로 발송 · 수신거부·발송 한도는 발송 시점 기준 ·{" "}
         <b className="text-red-600">서버 중단 시각의 예약은 미실행</b> · 서버 재시작 시 이후 예약 자동 재개
       </div>
       {!schedulerRunning && (

@@ -8,9 +8,10 @@ import { GUIDE_SECTIONS } from "@/lib/guide-content";
  * 모달(GuideDialog)과 전체 페이지(/guide)가 공유한다.
  */
 export default function GuideBody() {
-  const [active, setActive] = useState(GUIDE_SECTIONS[0].id);
+  const [active, setActive] = useState(GUIDE_SECTIONS[0]?.id ?? "");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const section = GUIDE_SECTIONS.find((s) => s.id === active)!;
+  const section = GUIDE_SECTIONS.find((s) => s.id === active);
+  if (!section) return <p className="p-6 text-[13px] text-muted">가이드 없음 · npm run guide 로 생성</p>;
 
   function select(id: string) {
     setActive(id);

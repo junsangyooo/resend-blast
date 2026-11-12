@@ -8,7 +8,7 @@ const DEFAULT_PLACEHOLDER =
   "예시)\n홍길동 hong@a.com\n홍길동, hong@a.com\n홍길동|hong@a.com\n홍길동 <hong@a.com>";
 
 function downloadSampleCsv() {
-  const csv = "email,name,company,title\nhong@example.com,홍길동,RLWRLD,매니저\njane@example.com,Jane Doe,Acme,Director\n";
+  const csv = "email,name,company,title\nhong@example.com,홍길동,Acme,매니저\njane@example.com,Jane Doe,Acme,Director\n";
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }); // BOM: 엑셀 한글 호환
   const u = URL.createObjectURL(blob);
   const a = document.createElement("a");

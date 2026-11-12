@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import os from "os";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { requireUserEmail } from "@/lib/auth";
+import { resolveAiAuth, toAiError, AiCallError, AI_ERROR, type AiAuthSource } from "@/lib/ai/auth";
 import { brand } from "@/brand.config";
 import { buildSystemPrompt, buildTurnPrompt } from "@/lib/ai/prompt";
 import { validateSpec } from "@/lib/ai/spec-validate";
@@ -21,8 +22,12 @@ function json(obj: unknown, status = 200) {
 }
 
 /** SDK 1회 호출. 텍스트 델타를 emit 하되 첫 ``` 이후(코드블록)는 채팅에 흘리지 않는다. */
-async function runOnce(system: string, prompt: string, emit: (e: ComposeEvent) => void, signal: AbortSignal): Promise<string> {
+async function runOnce(
+  system: string, prompt: string, emit: (e: ComposeEvent) => void, signal: AbortSignal,
+  auth: { source: AiAuthSource; env: Record<string, string | undefined> },
+): Promise<string> {
   let full = "";
+  let errCode: string | undefined;
   let sent = 0;
   let lastProgress = -1;
   const q = query({
@@ -35,6 +40,7 @@ async function runOnce(system: string, prompt: string, emit: (e: ComposeEvent) =
       maxTurns: 1,
       cwd: os.tmpdir(),
       settingSources: [],
+      env: auth.env,
     },
   });
   const onAbort = () => {
@@ -68,8 +74,13 @@ async function runOnce(system: string, prompt: string, emit: (e: ComposeEvent) =
             }
           }
         }
+      } else if (m.type === "assistant" && m.error) {
+        errCode = m.error;
       } else if (m.type === "result") {
-        if (m.subtype !== "success") throw new Error(`AI 호출 실패 (${m.subtype})`);
+        // An API error (bad key, no login, billing…) ends the turn with is_error and the error text.
+        if (m.subtype !== "success" || m.is_error || errCode) {
+          throw toAiError(auth.source, errCode, m.subtype === "success" ? m.result : m.subtype);
+        }
         if (!full) full = m.result;
       }
     }
@@ -105,8 +116,8 @@ export async function POST(req: NextRequest) {
   } catch {
     return json({ error: "unauthenticated" }, 401);
   }
-  // 인증: env 토큰(CLAUDE_CODE_OAUTH_TOKEN/ANTHROPIC_API_KEY) 또는 서버의 Claude CLI 로그인 세션.
-  // 여기서 하드 가드하지 않는다 — 미인증이면 SDK 호출이 에러를 내고 error 이벤트로 전달된다.
+  // Auth (lib/ai/auth): Settings key → .env.local key → the server's Claude CLI login.
+  // No hard guard here — without credentials the SDK call fails and an error event explains what to do.
   const rawBody = await req.text();
   if (rawBody.length > MAX_BODY_BYTES) return json({ error: "요청이 너무 큽니다" }, 413);
   let body: ComposeRequest;
@@ -142,13 +153,14 @@ export async function POST(req: NextRequest) {
         } catch {}
       };
       try {
-        let text = await runOnce(system, turn, emit, req.signal);
+        const auth = await resolveAiAuth();
+        let text = await runOnce(system, turn, emit, req.signal, auth);
         emit({ type: "progress", phase: "checking" });
         let r = parseResult(body.mode, text);
         if (!r.ok) {
           emit({ type: "retry" });
           const fixPrompt = `${turn}\n\n[직전 출력의 형식 오류 — 아래를 고쳐 같은 요청을 다시, 형식 엄수로 출력]\n${r.errors.join("\n")}`;
-          text = await runOnce(system, fixPrompt, emit, req.signal);
+          text = await runOnce(system, fixPrompt, emit, req.signal, auth);
           emit({ type: "progress", phase: "checking" });
           r = parseResult(body.mode, text);
         }
@@ -157,7 +169,7 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         if (!req.signal.aborted) {
           console.error("[ai/compose]", e);
-          emit({ type: "error", message: "AI 호출 실패 · 잠시 후 재시도" });
+          emit({ type: "error", message: e instanceof AiCallError ? e.userMessage : AI_ERROR.generic });
         }
       } finally {
         if (inFlight.get(user) === stamp) inFlight.delete(user);

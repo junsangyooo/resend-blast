@@ -76,7 +76,7 @@ export default function ProfileMenu({
             <MenuItem
               icon={<GearIcon />}
               label="설정"
-              hint="발송 이력 · 수신거부 · 발신자"
+              hint="발송 이력 · 예약 · 수신거부 · 발신자 · AI"
               onClick={() => { setOpen(false); onOpenSettings(); }}
             />
             <MenuItem

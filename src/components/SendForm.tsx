@@ -1,5 +1,6 @@
 "use client";
 
+import { ZONE_LABEL } from "@/lib/kst";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddTemplateDialog from "./AddTemplateDialog";
 import CreateEmailDialog from "./CreateEmailDialog";
@@ -377,7 +378,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
       }
       if (scheduledAt) {
         const j = await r.json();
-        setNotice(`예약 완료 · ${j.scheduledAtKst} KST · ${j.recipients}명`);
+        setNotice(`예약 완료 · ${j.scheduledAtKst} ${ZONE_LABEL} · ${j.recipients}명`);
         setScheduledNotice(true);
         setForceNextSend(false);
         setFollowupOf(undefined);
@@ -584,6 +585,8 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
         {/* ③ Sender options */}
         <section className="space-y-2.5">
           <StepHead n={3} title="발신 옵션" />
+          {/* Password mode has one shared operator identity — no personal sending, so no toggle. */}
+          {brand.auth.mode !== "password" && (
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => { if (myOption) setFrom(myOption.value); }}
@@ -601,6 +604,7 @@ export default function SendForm({ prefill, configReloadKey = 0, onScheduled, on
               공용 발신자로
             </button>
           </div>
+          )}
 
           <div className="rounded-lg border border-border bg-surface2/40 px-3 py-2 text-[12px]">
             {isPersonalFrom ? (

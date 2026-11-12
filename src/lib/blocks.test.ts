@@ -146,7 +146,7 @@ describe("renderTemplate (flat model)", () => {
     expect(off).not.toContain("문의:");
     // 저작권 줄의 회사명은 남고, 발신 정보 줄만 사라진다.
     expect(off).toContain(`&copy; ${new Date().getFullYear()}`);
-    expect(off).not.toMatch(/font-size:11px;[^"]*">\s*RLWRLD/);
+    expect(off).not.toMatch(new RegExp(`font-size:11px;[^"]*">\\s*${brand.identity.companyName}`));
   });
 });
 

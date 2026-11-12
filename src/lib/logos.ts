@@ -1,6 +1,6 @@
 /**
  * 헤더 로고 레지스트리.
- * 내장 로고(RLWRLD / RLDX-1)는 코드에 고정 — 항상 존재.
+ * Built-in logos come from brand.config `logos` — always present.
  * 업로드된 커스텀 로고는 data/logos.json 에 누적(gitignore, 서버 보존).
  * 이미지 파일 자체는 설정된 스토리지 백엔드에 올라간다(lib/storage, 기본 Azure Blob).
  */

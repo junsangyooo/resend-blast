@@ -178,6 +178,21 @@ export const brand = {
     defaultSubject: `[알림] ${COMPANY}`,
   },
 
+  // ── Scheduled sends ─────────────────────────────────────────────────────────
+  // Schedule times are entered and shown in ONE fixed time zone (no DST), independent of the
+  // server's and the browser's local zone. Default: Korea (UTC+9).
+  schedule: {
+    timeZoneLabel: "KST",   // label shown next to every schedule time
+    utcOffsetMinutes: 540,  // fixed offset from UTC in minutes (KST = +9h = 540)
+  },
+
+  // ── AI Studio ─────────────────────────────────────────────────────────────
+  // Model used to draft/edit emails. Auth: API key registered in Settings → AI, else
+  // ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN in .env.local, else the server's Claude CLI login.
+  ai: {
+    model: "claude-haiku-4-5",
+  },
+
   // ── App UI ──────────────────────────────────────────────────────────────
   ui: {
     /** Top header wordmark. */

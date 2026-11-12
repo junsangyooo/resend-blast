@@ -8,7 +8,7 @@
  *  - 그 외에 모든 사용자는 저장 없이 "내 계정" 가상 옵션(본인 주소)으로 발송 가능
  *
  * 구버전 from.json(스코프 미기록)은 읽기 시 personal 로 마이그레이션 —
- * owner 는 value 의 주소부에서 추론한다 (예: "Jacey Cho <jacey.cho@rlwrld.ai>").
+ * owner 는 value 의 주소부에서 추론한다 (e.g. "Jane Doe <jane.doe@example.com>").
  * 파일 쓰기는 atomic + per-key lock (다른 운영 데이터와 동일 패턴).
  */
 import fs from "fs/promises";

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Security-Policy":
-          "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src https: data:; script-src 'self' https:; frame-ancestors 'self'",
+          "default-src 'none'; img-src 'self' https: data:; style-src 'unsafe-inline'; font-src https: data:; script-src 'self' https:; frame-ancestors 'self'",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "no-referrer",
       },

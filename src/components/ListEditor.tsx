@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import RecipientInput from "./RecipientInput";
 import { mergeMembers as mergeWithFill, type Recipient } from "@/lib/recipients";
-import { formatKst } from "@/lib/kst";
+import { formatKst, ZONE_LABEL } from "@/lib/kst";
 
 /** Merge extra into base, deduped by email (base wins, first name preserved). */
 function mergeMembers(base: Recipient[], extra: Recipient[]): Recipient[] {
@@ -326,7 +326,7 @@ export default function ListEditor({
               {scheduleAsk.map((s) => (
                 <li key={s.id} className="flex justify-between gap-3">
                   <span className="truncate">{s.templateTitle ?? s.templateName}</span>
-                  <span className="text-muted shrink-0 tabular-nums">{formatKst(s.scheduledAt)} KST</span>
+                  <span className="text-muted shrink-0 tabular-nums">{formatKst(s.scheduledAt)} {ZONE_LABEL}</span>
                 </li>
               ))}
             </ul>

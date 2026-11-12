@@ -14,7 +14,7 @@ import { globalThrottle } from "./send-guards";
 import { fillPlaceholders, fillSubject } from "./personalize";
 import { SKIP_REASON } from "./status-text";
 import { inlineLocalImages, type InlineImageAttachment } from "./email-images";
-import { brand } from "@/brand.config";
+import { brand } from "../brand.config";
 
 const MAX_RETRIES = 1;
 const RETRY_BASE_MS = 1000;

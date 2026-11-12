@@ -1,5 +1,6 @@
 "use client";
 
+import { formatKst, ZONE_LABEL } from "@/lib/kst";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import StatusGuide from "./StatusGuide";
 import { isUnreachedSkip } from "@/lib/status-text";
@@ -440,7 +441,7 @@ function SendDetailModal({
               <DRow label="발송일시">{new Date(detail.createdAt).toLocaleString("ko-KR")}</DRow>
               <DRow label="발송자">{detail.sentBy}</DRow>
               <DRow label="이메일">{detail.templateTitle ?? detail.templateName}</DRow>
-              {detail.scheduledAt && <DRow label="예약 시각">{new Date(detail.scheduledAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} KST</DRow>}
+              {detail.scheduledAt && <DRow label="예약 시각">{formatKst(detail.scheduledAt, { withYear: true })} {ZONE_LABEL}</DRow>}
               <DRow label="From"><span className="font-mono">{detail.from}</span></DRow>
               <DRow label="리스트">
                 {detail.listSlugs.length > 0 ? detail.listSlugs.map((s) => lists[s] ?? s).join(", ") : "ad-hoc only"}

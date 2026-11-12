@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import TrackingSidebar, { type FollowupPayload } from "./TrackingSidebar";
 import ScheduledSends from "./ScheduledSends";
+import AiSettings from "./AiSettings";
 import { useEscClose } from "./hooks";
 import { brand } from "@/brand.config";
 
@@ -14,7 +15,7 @@ const REASON_LABEL: Record<string, string> = {
   unsubscribe: "수신거부", bounced: "반송", complained: "스팸신고", manual: "직접 추가",
 };
 
-export type SettingsTab = "history" | "schedules" | "suppression" | "senders" | "admins";
+export type SettingsTab = "history" | "schedules" | "suppression" | "senders" | "admins" | "ai";
 type Tab = SettingsTab;
 
 /**
@@ -213,6 +214,7 @@ export default function AdminSettings({
           {tabBtn("suppression", `수신거부/반송 (${supps.length})`)}
           {isAdmin ? tabBtn("senders", `발신자 관리 (${sharedSenders.length})`) : lockedTabBtn("senders", "발신자 관리")}
           {isAdmin ? tabBtn("admins", `관리자 (${admins.length})`) : lockedTabBtn("admins", "관리자")}
+          {isAdmin ? tabBtn("ai", "AI") : lockedTabBtn("ai", "AI")}
         </div>
 
         {err && <div className="mx-5 mt-3 text-[12px] text-red-500 bg-red-500/10 border border-red-500/30 rounded p-2">{err}</div>}
@@ -326,6 +328,7 @@ export default function AdminSettings({
             </>
           )}
 
+          {tab === "ai" && isAdmin && <AiSettings />}
           {tab === "admins" && isAdmin && (
             <>
               <div className="card p-3 space-y-2 bg-surface2/30">

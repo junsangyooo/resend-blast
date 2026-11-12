@@ -1,18 +1,29 @@
 /**
- * KST(Asia/Seoul, UTC+9, no DST) helpers — shared by client and server.
+ * Schedule time-zone helpers — shared by client and server.
  *
- * Scheduling is KST-only. All storage is UTC ISO; conversion uses a fixed +9h offset,
- * so the result never depends on the server's or the browser's local time zone
- * (a server configured for e.g. America/Los_Angeles with DST still gets the same instant).
+ * Scheduling uses ONE fixed time zone from brand.config `schedule` (default KST, UTC+9, no DST).
+ * All storage is UTC ISO; conversion uses the fixed offset, so the result never depends on the
+ * server's or the browser's local time zone (a server set to e.g. America/Los_Angeles with DST
+ * still gets the same instant). The "kst" names are historical; they mean "the schedule zone".
  */
+import { brand } from "../brand.config";
 
-export const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+export const KST_OFFSET_MS = brand.schedule.utcOffsetMinutes * 60 * 1000;
+/** Label shown next to every schedule time (e.g. "KST"). */
+export const ZONE_LABEL = brand.schedule.timeZoneLabel;
+/** "UTC+9" / "UTC-5:30" — tooltip text for the zone label. */
+export const ZONE_UTC = (() => {
+  const m = brand.schedule.utcOffsetMinutes;
+  const sign = m < 0 ? "-" : "+";
+  const a = Math.abs(m);
+  return `UTC${sign}${Math.floor(a / 60)}${a % 60 ? `:${String(a % 60).padStart(2, "0")}` : ""}`;
+})();
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_RE = /^(\d{2}):(\d{2})$/;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
-/** "2026-11-12" + "09:30" (KST wall clock) → Date (absolute instant). Invalid → null. */
+/** "2026-11-12" + "09:30" (schedule-zone wall clock) → Date (absolute instant). Invalid → null. */
 export function kstInputToDate(date: string, time: string): Date | null {
   const d = DATE_RE.exec(String(date ?? "").trim());
   const t = TIME_RE.exec(String(time ?? "").trim());
@@ -32,7 +43,7 @@ function pad(n: number): string {
   return String(n).padStart(2, "0");
 }
 
-/** Date → KST wall clock parts for <input type=date/time>. */
+/** Date → schedule-zone wall clock parts for <input type=date/time>. */
 export function toKstParts(d: Date): { date: string; time: string } {
   const k = new Date(d.getTime() + KST_OFFSET_MS);
   return {
@@ -41,7 +52,7 @@ export function toKstParts(d: Date): { date: string; time: string } {
   };
 }
 
-/** ISO/Date → "11월 12일 (목) 09:30" in KST. withYear adds "2026년 ". */
+/** ISO/Date → "11월 12일 (목) 09:30" in the schedule zone. withYear adds "2026년 ". */
 export function formatKst(input: string | Date, opts: { withYear?: boolean } = {}): string {
   const d = typeof input === "string" ? new Date(input) : input;
   if (!Number.isFinite(d.getTime())) return "";

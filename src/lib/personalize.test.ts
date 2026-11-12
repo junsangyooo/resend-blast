@@ -40,7 +40,7 @@ describe("fillPlaceholders", () => {
   });
 
   it("supports {{company}} / {{title}}", () => {
-    expect(fillPlaceholders("{{company}} · {{title}}", { company: "RLWRLD", title: "PM" })).toBe("RLWRLD · PM");
+    expect(fillPlaceholders("{{company}} · {{title}}", { company: "Acme", title: "PM" })).toBe("Acme · PM");
   });
 
   it("missing company/title becomes empty string, fallback works", () => {

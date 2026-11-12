@@ -2,24 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Theme tokens (RGB channels for /opacity 지원) ──
- * 화이트라벨: 앱 UI 브랜드 색은 아래 --brand / --brand-deep / --brand-mint
- * (light·dark 각각) 3개를 바꾸면 된다. 이메일 본문 색은 별도(brand.config.ts 의
- * email.colors). UI 와 이메일 톤을 맞추려면 두 곳을 같은 값으로 둔다. (docs/WHITELABEL.md)
+/* ── Theme tokens (RGB channels so `/opacity` works) ──
+ * The accent (--brand / --brand-deep / --brand-mint / --ring) is injected from brand.config
+ * (ui.appAccent*) by app/layout.tsx; the values below are only fallbacks. Email body colors are
+ * separate (brand.config email.colors).
  */
 :root {
-  /* Light — ops console: 밝은 회색 캔버스 · 민트 악센트 */
+  /* Light — ops console (accent is injected from brand.config by app/layout.tsx; these are fallbacks) */
   --bg: 240 242 245;
   --surface: 255 255 255;
   --surface2: 247 248 250;
   --border: 226 229 234;
   --muted: 108 115 124;
   --text: 24 28 33;
-  --brand: 17 158 135;        /* teal accent — 흰 배경에서 가독 */
-  --brand-deep: 13 124 108;
-  --brand-mint: 92 212 195;   /* CTA 그라데이션 밝은 쪽 */
+  --brand: 91 91 240;
+  --brand-deep: 74 74 214;
+  --brand-mint: 124 124 255;  /* lighter end of the CTA gradient */
   --on-brand: 255 255 255;
-  --ring: 17 158 135;
+  --ring: 91 91 240;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.04), 0 8px 24px rgb(16 24 40 / 0.06);
 }
 :root[data-theme="dark"] {
@@ -29,11 +29,11 @@
   --border: 38 40 46;
   --muted: 140 146 156;
   --text: 240 242 245;
-  --brand: 80 214 196;        /* mint — 어두운 배경에서 가독 */
-  --brand-deep: 23 165 142;
-  --brand-mint: 110 224 208;
+  --brand: 124 124 255;
+  --brand-deep: 91 91 240;
+  --brand-mint: 150 150 255;
   --on-brand: 8 12 14;
-  --ring: 80 214 196;
+  --ring: 124 124 255;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
 }
 

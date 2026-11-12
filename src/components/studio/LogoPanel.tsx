@@ -36,12 +36,12 @@ export default function LogoPanel({ spec, onPatch }: {
   );
 }
 
-/** Default header logo for a brand-new block email (same rule as before: the RLWRLD wordmark). */
+/** Default header logo for a brand-new block email: the first registered logo. */
 export async function defaultLogo(): Promise<NonNullable<TemplateSpec["logo"]> | null> {
   try {
     const j = await fetch("/api/logos").then((r) => r.json());
     const list: Logo[] = j.logos ?? [];
-    const d = list.find((x) => x.id === "rlwrld") ?? list[0];
+    const d = list[0];
     return d ? { url: d.url, width: d.width, alt: d.label } : null;
   } catch {
     return null;

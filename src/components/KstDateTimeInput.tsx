@@ -1,9 +1,10 @@
 "use client";
+import { ZONE_LABEL, ZONE_UTC } from "@/lib/kst";
 
 export type KstValue = { date: string; time: string };
 
 /**
- * Date + time input, always KST — the zone is fixed text right next to the fields.
+ * Date + time input, always in the schedule zone (brand.config schedule) — the zone is fixed text right next to the fields.
  * Conversion to the absolute instant happens in lib/kst (independent of server/browser zone).
  */
 export default function KstDateTimeInput({ value, onChange }: {
@@ -25,7 +26,7 @@ export default function KstDateTimeInput({ value, onChange }: {
         value={value.time}
         onChange={(e) => onChange({ ...value, time: e.target.value })}
       />
-      <span className="text-[13px] font-semibold text-text/80 shrink-0" title="한국 시간 (UTC+9)">KST</span>
+      <span className="text-[13px] font-semibold text-text/80 shrink-0" title={ZONE_UTC}>{ZONE_LABEL}</span>
     </div>
   );
 }
